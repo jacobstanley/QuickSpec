@@ -9,7 +9,7 @@ import Data.Ord
 import System.IO
 import System.Random
 import Term
-import InstanceClosure
+import TermCongruenceClosure
 
 -- Context
 
@@ -257,40 +257,41 @@ genType t =
 
 --
 
-prune :: Context -> Int -> Int -> [(Term, Term)] -> [(Term, Term)]
-prune' f ctx d s eqs = runIC substs ctx (mapM_ add eqs >> f)
-    where add (x, y) = x =:= y
-          substs t u ts = insts ts d s (t, u)
-prune ctx d s eqs = snd (prune' (return ()) ctx d s eqs)
+consequences :: [Term] -> (Term, Term) -> TCC ()
+consequences univ (t, u) = mapM_ unify (cons1 t u `mplus` cons1 u t)
+    where unify (x, y) = x =:= y
+          cons1 t u = do
+            a <- univ
+            s <- maybeToList (a `instOf` t)
+            let b = subst s u
+            return (a, b)
+            
+prune :: [Symbol] -> [Term] -> [(Term, Term)] -> [(Term, Term)]
+prune ctx univ es = snd (runTCC ctx (runWriterT (mapM_ consider es)))
+    where consider (t, u) = do
+            b <- lift (t =?= u)
+            when (not b) $ do
+              tell [(t, u)]
+              lift (consequences univ (t, u))
 
-insts ts d s (x,y) =
-    [ (x', y')
-    | sub <- substs vds
-    , let x' = subst sub x
-          y' = subst sub y
-    , size x' <= s
-    , size y' <= s
-    ]
-   where
-    vds = varDepths d x `merge` varDepths d y
-    substs :: [(Symbol,Int)] -> [[(Symbol,Term)]]
-    substs [] = [[]]
-    substs ((v,d):vds) =
-        [ (v,t) : sub
-        | t <- ts, typeOf t == typ v, depth t <= d
-        , sub <- substs vds
-        ]
+instOf :: Term -> Term -> Maybe [(Symbol,Term)]
+x `instOf` y = [x] `instOfL` [y]
 
-varDepths d (App s t)         = varDepths d s `merge` varDepths (d-1) t
-varDepths d (Sym s) | isVar s = [(s,d)]
-varDepths d _                 = []
+instOfL :: [Term] -> [Term] -> Maybe [(Symbol,Term)]
+xs `instOfL` ys = comp [] (zip ys xs)
+ where
+  comp sub []                                 = Just sub
+  comp sub ((Sym s,t):ps) | isVar s           = compSub sub s t ps
+                          | t == Sym s        = comp sub ps
+                          | otherwise         = Nothing
+  comp sub ((App f x, App g y):ps)            = comp sub ([(f, g), (x, y)] ++ ps)
+  comp _   _                                  = Nothing
 
-[]          `merge` yks = yks
-xks         `merge` []  = xks
-((x,k):xks) `merge` ((y,n):yns)
-    | x < y     = (x,k) : (xks `merge` ((y,n):yns))
-    | x == y    = (x, k `min` n) : (xks `merge` yns)
-    | otherwise = (y,n) : (((x,k):xks) `merge` yns)
+  compSub sub v t ps =
+    case [ t' | (v',t') <- sub, v == v' ] of
+      []             -> comp ((v,t):sub) ps
+      t':_ | t == t' -> comp sub ps
+      _              -> Nothing
 
 subst :: [(Symbol,Term)] -> Term -> Term
 subst sub (App s t)           = App (subst sub s) (subst sub t)
@@ -324,7 +325,7 @@ alphaRename ctx (x,y,t)
 --main :: IO ()
 main =
   do hSetBuffering stdout NoBuffering
-     eqs bools (3,7) (4,7)
+     eqs bools (3,7) (3,7)
 
 --eqs :: Context -> (Int,Int) -> (Int,Int) -> IO ()
 eqs ctx0 (eqd,eqs) (und,uns) =
@@ -369,9 +370,9 @@ eqs ctx0 (eqd,eqs) (und,uns) =
        ]
      -}
      putStrLn "== equations =="
-     let univ = M.fromList [(t, terms ctx und uns t) | t <- allTypes ctx]
+     let univ = concat [terms ctx und uns t | t <- allTypes ctx]
      sequence_
        [ putStrLn (show y ++ " = " ++ show x)
-       | (y,x) <- prune ctx und uns (map (\(x,y,_) -> (x,y)) eqs)
+       | (y,x) <- prune ctx univ (map (\(x,y,_) -> (x,y)) eqs)
        ]
      return (univ, map (\(x,y,_) -> (x,y)) eqs)
