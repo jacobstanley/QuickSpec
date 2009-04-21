@@ -7,6 +7,7 @@ import qualified Data.Map as M
 import Data.Maybe
 import Data.Ord
 import System.IO
+import System.IO.Unsafe(unsafeInterleaveIO)
 import System.Random
 import Term
 import TermCongruenceClosure
@@ -177,29 +178,39 @@ terms ctx d s t =
 
 --
 
-refine :: Context -> Int -> [Term] -> IO [[Term]]
-refine ctx mx xs = loop 0 xs
- where
-  loop k xs | k > mx =
-    do return [xs]
+iterateUntil :: Eq b => (a -> b) -> (a -> a) -> a -> a
+iterateUntil p f x = fst (head (filter eq (zip xs (tail xs))))
+    where xs = iterate f x
+          eq (a, b) = p a == p b
 
-  loop k xs =
-    do ctx' <- gen ctx
-       case split ctx' xs of
-         []  -> do return []
-         [_] -> do loop (k+1) xs
-         xss -> do xsss <- sequence [ refine ctx mx xs' | xs' <- xss, nonTrivial xs' ]
-                   return (concat xsss)
+refine :: Ord b => Int -> (a -> [b]) -> [a] -> [[a]]
+refine step eval xs = flatten (iterateUntil lengths refine1 ([], [[ (x, eval x) | x <- xs ]]))
+    where flatten (triv, nontriv) = map (map fst) (triv ++ nontriv)
+          refine1 (triv, nontriv) =
+              let
+                (triv', nontriv') = partition trivial (concatMap split nontriv)
+              in
+                (triv ++ triv', nontriv')
+          lengths (xs, ys) = length xs + length ys
+          first (x, vs) = take step vs
+          next (x, vs) = (x, drop step vs)
+          trivial [] = True
+          trivial [_] = True
+          trivial _ = False
+          split xs = map (map next) (groupBy (\a b -> first a == first b)
+                                             (sortBy (comparing first) xs))
 
-  nonTrivial []  = False
-  nonTrivial [_] = False
-  nonTrivial _   = True
+refine' :: Context -> [Term] -> IO [[Term]]
+refine' ctx xs = do
+  ctxs <- gens ctx
+  let f x = [ eval ctx x | ctx <- ctxs ]
+  return (refine 50 f xs)
 
-  split ctx
-    = map (map fst)
-    . groupBy (\a b -> snd a == snd b)
-    . sortBy (\a b -> snd a `compare` snd b)
-    . map (\x -> (x, eval ctx x))
+gens :: Context -> IO [Context]
+gens ctx = unsafeInterleaveIO $ do
+             ctx' <- gen ctx
+             ctxs <- gens ctx
+             return (ctx':ctxs)
 
 gen :: Context -> IO Context
 gen ctx =
@@ -351,7 +362,7 @@ eqs ctx0 (eqd,eqs) (und,uns) =
        ]
      putStrLn "== classes =="
      clss <- sequence
-               [ do xss <- refine ctx 100 xs
+               [ do xss <- refine' ctx xs
                     putStrLn (show t ++ ": " ++ show (length xss) ++ " classes, "
                                              ++ show (sum [ length xs | (x:xs) <- xss]) ++ " raw equations")
                     return (t, map sort xss)
