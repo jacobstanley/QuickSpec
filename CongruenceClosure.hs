@@ -1,6 +1,6 @@
 -- Based on the paper "Proof-producing Congruence Closure".
 
-module CongruenceClosure(CC, newSym, (=:=), rep, reps, runCC, ($$), S) where
+module CongruenceClosure(CC, newSym, (=:=), (=?=), rep, reps, runCC, ($$), S) where
 
 import Prelude hiding (lookup)
 import Control.Monad.State
@@ -56,6 +56,11 @@ f $$ x = do
 
 (=:=) :: Int -> Int -> CC a Bool
 a =:= b = propagate (a, b)
+
+t =?= u = do
+  (r1, _) <- rep t
+  (r2, _) <- rep u
+  return (r1 == r2)
 
 propagate (a, b) = do
   (unified, pending) <- propagate1 (a, b)

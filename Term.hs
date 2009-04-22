@@ -40,6 +40,8 @@ data Term c
 class Typed a where
     typeOf :: a -> Type
 
+instance Typed Symbol where typeOf = typ
+
 instance Typed c => Typed (Term c) where
     typeOf (Const c) = typeOf c
     typeOf (Var v) = typ v

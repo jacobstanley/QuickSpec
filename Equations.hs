@@ -10,7 +10,7 @@ import System.IO
 import System.IO.Unsafe(unsafeInterleaveIO)
 import System.Random
 import Term
-import TermCongruenceClosure
+import CongruenceClosure
 
 -- Context
 
@@ -270,22 +270,54 @@ genType t =
 
 --
 
-consequences :: [Term Symbol] -> (Term Symbol, Term Symbol) -> TCC ()
-consequences univ (t, u) = mapM_ unify (cons1 t u `mplus` cons1 u t)
-    where unify (x, y) = x =:= y
+varDepths d (App s t) = varDepths d s `merge` varDepths (d-1) t
+varDepths d (Var x)   = [(x,d)]
+varDepths d _         = []
+  
+[]          `merge` yks = yks
+xks         `merge` []  = xks
+((x,k):xks) `merge` ((y,n):yns)
+  | x < y     = (x,k) : (xks `merge` ((y,n):yns))
+  | x == y    = (x, k `min` n) : (xks `merge` yns)
+  | otherwise = (y,n) : (((x,k):xks) `merge` yns)
+
+consequences :: Int -> [(Int, Int, Type)] -> (Term Int, Term Int) -> CC () ()
+consequences d univ (t, u) = mapM_ unify (cons1 t u `mplus` cons1 u t)
+    where unify (x, y) = do
+            x' <- flatten x
+            y' <- flatten y
+            x' =:= y'
           cons1 t u = do
-            a <- univ
-            s <- maybeToList (a `instOf` t)
-            let b = subst s u
-            return (a, b)
-            
-prune :: [Symbol] -> [Term Symbol] -> [(Term Symbol, Term Symbol)] -> [(Term Symbol, Term Symbol)]
-prune ctx univ es = snd (runTCC ctx (runWriterT (mapM_ consider es)))
-    where consider (t, u) = do
-            b <- lift (t =?= u)
+            s <- mapM substs (varDepths d t)
+            return (subst s t, subst s u)
+          substs (v, d) = [ (v, Const s) | (_, s, ty) <- takeWhile (\(d', _, _) -> d' <= d) univ, ty == typ v ]
+
+flatten (Var s) = return (label s)
+flatten (Const s) = return s
+flatten (App t u) = do
+  t' <- flatten t
+  u' <- flatten u
+  t' $$ u'
+
+killSymbols (Var s) = Var s
+killSymbols (Const s) = Const (label s)
+killSymbols (App t u) = App (killSymbols t) (killSymbols u)
+
+prune :: [Symbol] -> Int -> [Term Symbol] -> [(Term Symbol, Term Symbol)] -> [(Term Symbol, Term Symbol)]
+prune ctx d univ es = snd (runCC const const (replicate (length ctx) ()) (runWriterT pruneCC))
+    where pruneCC = do
+            univ' <- fmap (sortBy (comparing (\(d,_,_) -> d))) (mapM f univ)
+            mapM_ (consider univ') es
+          consider univ (t, u) = do
+            t' <- lift (flatten (killSymbols t))
+            u' <- lift (flatten (killSymbols u))
+            b <- lift (t' =?= u')
             when (not b) $ do
               tell [(t, u)]
-              lift (consequences univ (t, u))
+              lift (consequences d univ (killSymbols t, killSymbols u))
+          f t = do
+            t' <- lift (flatten (killSymbols t))
+            return (depth t, t', typeOf t)
 
 instOf :: Term Symbol -> Term Symbol -> Maybe [(Symbol,Term Symbol)]
 x `instOf` y = [x] `instOfL` [y]
@@ -306,7 +338,7 @@ xs `instOfL` ys = comp [] (zip ys xs)
       t':_ | t == t' -> comp sub ps
       _              -> Nothing
 
-subst :: [(Symbol,Term Symbol)] -> Term Symbol -> Term Symbol
+subst :: [(Symbol, Term a)] -> Term a -> Term a
 subst sub (App s t) = App (subst sub s) (subst sub t)
 subst sub t@(Var s) = head ([ t | (v,t) <- sub, s == v ] ++ [ t ])
 subst sub s         = s
@@ -386,6 +418,6 @@ eqs ctx0 (eqd,eqs) (und,uns) =
      let univ = concat [terms ctx und uns t | t <- allTypes ctx]
      sequence_
        [ putStrLn (show y ++ " = " ++ show x)
-       | (y,x) <- prune ctx univ (map (\(x,y,_) -> (x,y)) eqs)
+       | (y,x) <- prune ctx eqd univ (map (\(x,y,_) -> (x,y)) eqs)
        ]
      return (univ, map (\(x,y,_) -> (x,y)) eqs)
