@@ -17,8 +17,9 @@ import TermCongruenceClosure
 type Context
   = [Symbol]
 
-eval :: Context -> Term -> Data
-eval ctx (Sym s)   = head ([ fromJust (what elt) | elt <- ctx, name elt == show s ] ++ error ("eval, no " ++ show s))
+eval :: Context -> Term Symbol -> Data
+eval ctx (Const s) = head ([ fromJust (what elt) | elt <- ctx, name elt == show s ] ++ error ("eval, no " ++ show s))
+eval ctx (Var v)   = error "ground term needed"
 eval ctx (App s t) = case eval ctx s of
                        Fun f -> f (eval ctx t)
 
@@ -151,12 +152,13 @@ bools2 = [ band, b1, b2 ]
 
 --
 
-terms :: Context -> Int -> Int -> Type -> [Term]
+terms :: Context -> Int -> Int -> Type -> [Term Symbol]
 terms ctx d s t =
-     [ Sym elt
+     [ sym elt
      | d >= 1 && s >= 1
      , elt <- ctx
      , typ elt == t
+     , let sym = if isVar elt then Var else Const
      ]
   ++ [ App f x
      | d >= 1 && s >= 2
@@ -200,7 +202,7 @@ refine step eval xs = flatten (iterateUntil lengths refine1 ([], [[ (x, eval x) 
           split xs = map (map next) (groupBy (\a b -> first a == first b)
                                              (sortBy (comparing first) xs))
 
-refine' :: Context -> [Term] -> IO [[Term]]
+refine' :: Context -> [Term Symbol] -> IO [[Term Symbol]]
 refine' ctx xs = do
   ctxs <- gens ctx
   let f x = [ eval ctx x | ctx <- ctxs ]
@@ -268,7 +270,7 @@ genType t =
 
 --
 
-consequences :: [Term] -> (Term, Term) -> TCC ()
+consequences :: [Term Symbol] -> (Term Symbol, Term Symbol) -> TCC ()
 consequences univ (t, u) = mapM_ unify (cons1 t u `mplus` cons1 u t)
     where unify (x, y) = x =:= y
           cons1 t u = do
@@ -277,7 +279,7 @@ consequences univ (t, u) = mapM_ unify (cons1 t u `mplus` cons1 u t)
             let b = subst s u
             return (a, b)
             
-prune :: [Symbol] -> [Term] -> [(Term, Term)] -> [(Term, Term)]
+prune :: [Symbol] -> [Term Symbol] -> [(Term Symbol, Term Symbol)] -> [(Term Symbol, Term Symbol)]
 prune ctx univ es = snd (runTCC ctx (runWriterT (mapM_ consider es)))
     where consider (t, u) = do
             b <- lift (t =?= u)
@@ -285,16 +287,16 @@ prune ctx univ es = snd (runTCC ctx (runWriterT (mapM_ consider es)))
               tell [(t, u)]
               lift (consequences univ (t, u))
 
-instOf :: Term -> Term -> Maybe [(Symbol,Term)]
+instOf :: Term Symbol -> Term Symbol -> Maybe [(Symbol,Term Symbol)]
 x `instOf` y = [x] `instOfL` [y]
 
-instOfL :: [Term] -> [Term] -> Maybe [(Symbol,Term)]
+instOfL :: [Term Symbol] -> [Term Symbol] -> Maybe [(Symbol,Term Symbol)]
 xs `instOfL` ys = comp [] (zip ys xs)
  where
   comp sub []                                 = Just sub
-  comp sub ((Sym s,t):ps) | isVar s           = compSub sub s t ps
-                          | t == Sym s        = comp sub ps
-                          | otherwise         = Nothing
+  comp sub ((Var s,t):ps)                     = compSub sub s t ps
+  comp sub ((Const s,t):ps) | t == Const s    = comp sub ps
+                            | otherwise       = Nothing
   comp sub ((App f x, App g y):ps)            = comp sub ([(f, g), (x, y)] ++ ps)
   comp _   _                                  = Nothing
 
@@ -304,14 +306,14 @@ xs `instOfL` ys = comp [] (zip ys xs)
       t':_ | t == t' -> comp sub ps
       _              -> Nothing
 
-subst :: [(Symbol,Term)] -> Term -> Term
-subst sub (App s t)           = App (subst sub s) (subst sub t)
-subst sub t@(Sym s) | isVar s = head ([ t | (v,t) <- sub, s == v ] ++ [ t ])
-subst sub s                   = s
+subst :: [(Symbol,Term Symbol)] -> Term Symbol -> Term Symbol
+subst sub (App s t) = App (subst sub s) (subst sub t)
+subst sub t@(Var s) = head ([ t | (v,t) <- sub, s == v ] ++ [ t ])
+subst sub s         = s
 
 --
 
-alphaRename :: Context -> (Term,Term,Type) -> (Term,Term,Type)
+alphaRename :: Context -> (Term Symbol,Term Symbol,Type) -> (Term Symbol,Term Symbol,Type)
 alphaRename ctx (x,y,t)
   | x' < y'   = (y',x',t)
   | otherwise = (x',y',t)
@@ -320,7 +322,7 @@ alphaRename ctx (x,y,t)
   y' = subst sub y
  
   vs = nub (vars x ++ vars y)
-  sub = [ (v, Sym (alpha v))
+  sub = [ (v, Var (alpha v))
         | v <- vs
         ]
   alpha v =
@@ -343,7 +345,7 @@ eqs ctx0 (eqd,eqs) (und,uns) =
   do putStrLn "== API =="
      putStrLn "-- functions"
      let ctx = zipWith relabel [0..] ctx0
-     sequence_ [ putStrLn (show (Sym elt) ++ " :: " ++ show (typ elt))
+     sequence_ [ putStrLn (show (Const elt) ++ " :: " ++ show (typ elt))
                | elt <- ctx
                , not (isNothing (what elt))
                ]

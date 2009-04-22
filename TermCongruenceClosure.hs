@@ -9,22 +9,22 @@ import qualified CongruenceClosure as CC
 import Term
 
 type S = Map [Maybe Symbol] Int
-type TCC = StateT S (CC Term)
+type TCC = StateT S (CC (Term Symbol))
 
-register :: Term -> Int -> TCC ()
+register :: Term Symbol -> Int -> TCC ()
 register t n = modify (Map.insertWith (\x y -> y) (flattenTerm t) n)
 
 runTCC :: [Symbol] -> TCC a -> a
-runTCC ctx m = CC.runCC App min (map Sym ctx) (evalStateT (init >> m) Map.empty)
-    where init = mapM_ (\s -> register (Sym s) (label s)) ctx
+runTCC ctx m = CC.runCC App min (map Const ctx) (evalStateT (init >> m) Map.empty)
+    where init = mapM_ (\s -> register (Const s) (label s)) ctx
 
-(=:=) :: Term -> Term -> TCC Bool
+(=:=) :: Term Symbol -> Term Symbol -> TCC Bool
 t =:= u = do
   s1 <- flatten t
   s2 <- flatten u
   lift (s1 CC.=:= s2)
 
-(=?=) :: Term -> Term -> TCC Bool
+(=?=) :: Term Symbol -> Term Symbol -> TCC Bool
 t@(App f x) =?= u@(App g y) = orM [andM [f =?= g, x =?= y], t `cceq` u]
 t =?= u = t `cceq` u
 t `cceq` u = frozen $ do
@@ -43,13 +43,14 @@ andM (x:xs) = do
   b <- x
   if b then andM xs else return False
 
-flatten :: Term -> TCC Int
+flatten :: Term Symbol -> TCC Int
 flatten t = do
   r <- fmap (Map.lookup (flattenTerm t)) get
   case r of
     Just n -> return n
     Nothing -> flatten' t
-flatten' (Sym s) = return (label s)
+flatten' (Const s) = return (label s)
+flatten' (Var _) = error "ground term needed"
 flatten' s@(App t u) = do
   s1 <- flatten t
   s2 <- flatten u

@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 module Term where
 
 import Data.Ord
@@ -30,52 +31,60 @@ isOp s | isCon s && name s == "[]" = False
 isOp s | isCon s = not (all isAlpha (name s))
 isOp _            = False
 
-data Term
-  = Sym Symbol
-  | App Term Term
+data Term c
+  = Const c
+  | Var Symbol
+  | App (Term c) (Term c)
  deriving (Eq)
 
-flattenTerm :: Term -> [Maybe Symbol]
-flattenTerm (Sym s) = [Just s]
+class Typed a where
+    typeOf :: a -> Type
+
+instance Typed c => Typed (Term c) where
+    typeOf (Const c) = typeOf c
+    typeOf (Var v) = typ v
+    typeOf (App t u) = a
+        where _ :-> a = typeOf t
+
+flattenTerm :: Term Symbol -> [Maybe Symbol]
+flattenTerm (Var s) = [Just s]
+flattenTerm (Const s) = [Just s]
 flattenTerm (App t u) = [Nothing] ++ flattenTerm t ++ flattenTerm u
 
-typeOf :: Term -> Type
-typeOf (Sym s) = typ s
-typeOf (App t u) = a
-    where _ :-> a = typeOf t
-
-depth, size, numVars :: Term -> Int
-depth (Sym _)   = 1
+depth, size, numVars :: Term c -> Int
 depth (App s t) = depth s `max` (1 + depth t)
+depth _ = 1
 
-size (Sym _)   = 1
 size (App s t) = size s + size t
+size _ = 1
 
-numVars (Sym s) | isVar s = 1
-numVars (Sym _)       = 0
+numVars (Var _) = 1
+numVars (Const _)       = 0
 numVars (App s t)     = numVars s + numVars t
 
-vars :: Term -> [Symbol]
-vars (App s t)     = nub (vars s ++ vars t)
-vars (Sym s) | isVar s = [s]
-vars _             = []
+vars :: Term c -> [Symbol]
+vars (App s t) = nub (vars s ++ vars t)
+vars (Var s)   = [s]
+vars _         = []
 
-instance Ord Term where
+instance Ord (Term Symbol) where
   s `compare` t = stamp s `compare` stamp t
    where
     stamp t = (depth t, size t, -occur t, top t, args t)
     
     occur t = length (vars t)
     
-    top (Sym s) = Just s
-    top _       = Nothing
+    top (Var s)   = Just s
+    top (Const s) = Just s
+    top _         = Nothing
     
     args (App s t) = [s,t]
     args _         = []
 
-instance Show Term where
-  showsPrec _ (Sym s)   | isOp s    = showString ("(" ++ show s ++ ")")
-                        | otherwise = shows s
+instance Show (Term Symbol) where
+  showsPrec _ (Const s)   | isOp s    = showString ("(" ++ show s ++ ")")
+                          | otherwise = shows s
+  showsPrec _ (Var s) = shows s
   showsPrec p (App f x)             = showString (showApp p f [x])
    where
      paren 0 s = s
@@ -84,10 +93,10 @@ instance Show Term where
      showApp p (App f x) xs =
        showApp p f (x:xs)
      
-     showApp p (Sym op) [x] | isOp op =
+     showApp p (Const op) [x] | isOp op =
        paren 9 (show' x ++ show op)
 
-     showApp p (Sym op) [x,y] | isOp op =
+     showApp p (Const op) [x,y] | isOp op =
        paren p (show' x ++ show op ++ show' y)
 
      showApp p f xs =
