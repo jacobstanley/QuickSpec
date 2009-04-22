@@ -19,7 +19,7 @@ type Context
 
 eval :: Context -> Term Symbol -> Data
 eval ctx (Const s) = head ([ fromJust (what elt) | elt <- ctx, name elt == show s ] ++ error ("eval, no " ++ show s))
-eval ctx (Var v)   = error "ground term needed"
+eval ctx (Var s) = head ([ fromJust (what elt) | elt <- ctx, name elt == show s ] ++ error ("eval, no " ++ show s))
 eval ctx (App s t) = case eval ctx s of
                        Fun f -> f (eval ctx t)
 

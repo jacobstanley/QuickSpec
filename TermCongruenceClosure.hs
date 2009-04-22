@@ -50,7 +50,7 @@ flatten t = do
     Just n -> return n
     Nothing -> flatten' t
 flatten' (Const s) = return (label s)
-flatten' (Var _) = error "ground term needed"
+flatten' (Var s) = return (label s)
 flatten' s@(App t u) = do
   s1 <- flatten t
   s2 <- flatten u
