@@ -9,6 +9,7 @@ import Data.Ord
 import System.IO
 import System.IO.Unsafe(unsafeInterleaveIO)
 import System.Random
+import Text.Printf
 import Term
 import CongruenceClosure
 
@@ -152,19 +153,17 @@ bools2 = [ band, b1, b2 ]
 
 --
 
-terms :: Context -> Int -> Int -> Type -> [Term Symbol]
-terms ctx d s t =
+terms :: [Symbol] -> (Type -> [Term Symbol]) -> Type -> [Term Symbol]
+terms ctx base t =
      [ sym elt
-     | d >= 1 && s >= 1
-     , elt <- ctx
+     | elt <- ctx
      , typ elt == t
      , let sym = if isVar elt then Var else Const
      ]
   ++ [ App f x
-     | d >= 1 && s >= 2
-     , t' <- argtypes ctx t
-     , x  <- terms ctx (d-1) (s-1)      t'
-     , f  <- terms ctx d     (s-size x) (t' :-> t)
+     | t' <- argtypes ctx t
+     , x  <- base t'
+     , f  <- terms ctx base (t' :-> t)
      ]
  where
   argtypes ctx t =
@@ -178,16 +177,21 @@ terms ctx d s t =
   funs (s :-> t) = (s :-> t) : funs t
   funs _         = []
 
+allTerms :: Int -> [Symbol] -> Type -> [Term Symbol]
+allTerms 0 ctx ty = []
+allTerms (n+1) ctx ty = terms ctx (allTerms n ctx) ty
+
 --
 
-iterateUntil :: Eq b => (a -> b) -> (a -> a) -> a -> a
-iterateUntil p f x = fst (head (filter eq (zip xs (tail xs))))
+iterateUntil :: Eq b => (a -> b) -> (a -> a) -> a -> (Int, a)
+iterateUntil p f x = extract (head (filter eq (zip3 xs (tail xs) [0..])))
     where xs = iterate f x
-          eq (a, b) = p a == p b
+          eq (a, b, _) = p a == p b
+          extract (x, _, n) = (n, x)
 
-refine :: Ord b => Int -> (a -> [b]) -> [a] -> [[a]]
-refine step eval xs = flatten (iterateUntil lengths refine1 ([], [[ (x, eval x) | x <- xs ]]))
-    where flatten (triv, nontriv) = map (map fst) (triv ++ nontriv)
+refine :: Ord b => Int -> (a -> [b]) -> [[a]] -> (Int, [[a]])
+refine step eval xss = flatten (iterateUntil lengths refine1 ([], map (map (\x -> (x, eval x))) xss))
+    where flatten (n, (triv, nontriv)) = (n, map (map fst) (triv ++ nontriv))
           refine1 (triv, nontriv) =
               let
                 (triv', nontriv') = partition trivial (concatMap split nontriv)
@@ -201,12 +205,6 @@ refine step eval xs = flatten (iterateUntil lengths refine1 ([], [[ (x, eval x) 
           trivial _ = False
           split xs = map (map next) (groupBy (\a b -> first a == first b)
                                              (sortBy (comparing first) xs))
-
-refine' :: Context -> [Term Symbol] -> IO [[Term Symbol]]
-refine' ctx xs = do
-  ctxs <- gens ctx
-  let f x = [ eval ctx x | ctx <- ctxs ]
-  return (refine 50 f xs)
 
 gens :: Context -> IO [Context]
 gens ctx = unsafeInterleaveIO $ do
@@ -345,10 +343,10 @@ subst sub s         = s
 
 --
 
-alphaRename :: Context -> (Term Symbol,Term Symbol,Type) -> (Term Symbol,Term Symbol,Type)
-alphaRename ctx (x,y,t)
-  | x' < y'   = (y',x',t)
-  | otherwise = (x',y',t)
+alphaRename :: Context -> (Term Symbol,Term Symbol) -> (Term Symbol,Term Symbol)
+alphaRename ctx (x,y)
+  | x' < y'   = (y',x')
+  | otherwise = (x',y')
  where
   x' = subst sub x
   y' = subst sub y
@@ -370,54 +368,56 @@ alphaRename ctx (x,y,t)
 --main :: IO ()
 main =
   do hSetBuffering stdout NoBuffering
-     eqs bools (3,7) (3,7)
+     laws bools 3
 
---eqs :: Context -> (Int,Int) -> (Int,Int) -> IO ()
-eqs ctx0 (eqd,eqs) (und,uns) =
-  do putStrLn "== API =="
-     putStrLn "-- functions"
-     let ctx = zipWith relabel [0..] ctx0
-     sequence_ [ putStrLn (show (Const elt) ++ " :: " ++ show (typ elt))
-               | elt <- ctx
-               , not (isNothing (what elt))
-               ]
-     putStrLn "-- variables"
-     sequence_ [ putStrLn (name elt ++ " :: " ++ show (typ elt))
-               | elt <- ctx
-               , isNothing (what elt)
-               ]
-     putStrLn "== types =="
-     putStrLn ("-- depth <= " ++ show eqd ++ ", size <= " ++ show eqs)
-     let trms = [ (t, xs) | t <- eqTypes ctx, let xs = terms ctx eqd eqs t, not (null xs) ]
-     sequence_
-       [ do putStrLn (show t ++ ": " ++ show (length xs) ++ " terms")
-            -- sequence_ [ putStrLn (show x) | x <- xs ]
-       | (t, xs) <- trms
-       ]
-     putStrLn "== classes =="
-     clss <- sequence
-               [ do xss <- refine' ctx xs
-                    putStrLn (show t ++ ": " ++ show (length xss) ++ " classes, "
-                                             ++ show (sum [ length xs | (x:xs) <- xss]) ++ " raw equations")
-                    return (t, map sort xss)
-               | (t,xs) <- trms
-               ]
-     let eqs  = map head
-              $ group
-              $ sortBy (comparing (\(x,y,t) -> (x,y)))
-              $ map (alphaRename ctx)
-              $ [ (y,x,t) | (t, xss) <- clss, (x:xs) <- xss, y <- xs ]
-     putStrLn ("-- after alpha renaming: " ++ show (length eqs) ++ " raw equations")
-     {-
-     sequence_
+laws ctx0 depth = do
+  let ctx = zipWith relabel [0..] ctx0
+  putStrLn "== API =="
+  putStrLn "-- functions"
+  sequence_ [ putStrLn (show (Const elt) ++ " :: " ++ show (typ elt))
+            | elt <- ctx
+            , not (isNothing (what elt))
+            ]
+  putStrLn "-- variables"
+  sequence_ [ putStrLn (name elt ++ " :: " ++ show (typ elt))
+            | elt <- ctx
+            , isNothing (what elt)
+            ]
+  vals <- gens ctx
+  putStrLn "== classes =="
+  (_, cs) <- bind [testGen i ctx vals . snd | i <- [1..depth-1]] (undefined, const []) >>= test depth ctx vals . snd
+  let eqs = map head
+          $ group
+          $ sort
+          $ map (alphaRename ctx)
+          $ [ (y,x) | (x:xs) <- cs, y <- xs ]
+  printf "After alpha renaming: %d raw equations.\n\n" (length eqs)
+--  let univ = concat [allTerms depth ctx t | t <- allTypes ctx]
+  let univ = concat cs
+  printf "Universe has %d terms.\n" (length univ)
+  putStrLn "== equations =="
+  sequence_
        [ putStrLn (show y ++ " = " ++ show x)
-       | (y,x) <- eqs
+       | (y,x) <- prune ctx depth univ eqs
        ]
-     -}
-     putStrLn "== equations =="
-     let univ = concat [terms ctx und uns t | t <- allTypes ctx]
-     sequence_
-       [ putStrLn (show y ++ " = " ++ show x)
-       | (y,x) <- prune ctx eqd univ (map (\(x,y,_) -> (x,y)) eqs)
-       ]
-     return (univ, map (\(x,y,_) -> (x,y)) eqs)
+
+bind [] x = return x
+bind (f:fs) x = f x >>= bind fs
+
+test :: Int -> Context -> [Context] -> (Type -> [Term Symbol]) -> IO (Int, [[Term Symbol]])
+test depth ctx vals base = do
+  printf "Depth %d: " depth
+  let cs0 = filter (not . null) [ terms ctx base ty | ty <- eqTypes ctx ]
+  printf "%d terms, " (length (concat cs0))
+  let eval' x = [ eval val x | val <- vals ]
+      (n, cs1) = refine 50 eval' cs0
+      cs = map sort cs1
+  printf "%d classes, %d raw equations, %d tests.\n"
+         (length cs)
+         (sum (map (subtract 1 . length) cs))
+         (n*50)
+  return (n*50, cs)
+
+testGen :: Int -> Context -> [Context] -> (Type -> [Term Symbol]) -> IO (Int, Type -> [Term Symbol])
+testGen depth ctx vals base = do
+  fmap (\(n, cs) -> (n, \ty -> [ t | (t:_) <- cs, typeOf t == ty])) (test depth ctx vals base)
