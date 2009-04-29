@@ -128,6 +128,9 @@ true = "True" =:: bool
 false = "False" =:: bool
      =: Bool False
 
+zero = "0" =:: int =: Int 0
+one = "1" =:: int =: Int 1
+
 nil  = "[]" =:: list a
      =: List []
 
@@ -144,7 +147,7 @@ lists' :: Context
 lists' = [ nil, app, rev, srt, xs ]
 
 ints :: Context
-ints = [ plus, mult, x, y, z ]
+ints = [ plus, mult, x, y, z, zero, one ]
 
 bools :: Context
 bools = [ bor, band, bnot, false, true, b1, b2, b3 ]
