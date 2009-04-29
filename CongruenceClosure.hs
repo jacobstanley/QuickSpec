@@ -1,6 +1,6 @@
 -- Based on the paper "Proof-producing Congruence Closure".
 
-module CongruenceClosure(CC, newSym, (=:=), (=?=), rep, reps, runCC, ($$), S) where
+module CongruenceClosure(CC, newSym, (=:=), (=?=), rep, reps, runCC, ($$), S, frozen) where
 
 import Prelude hiding (lookup)
 import Control.Monad.State.Strict
@@ -92,6 +92,15 @@ rep :: Int -> CC a (Int, a)
 rep s = lift (UF.rep s)
 reps :: CC a (IntMap a)
 reps = lift UF.reps
+
+frozen :: CC s a -> CC s a
+frozen x = do
+  s <- get
+  s' <- lift get
+  r <- x
+  put s
+  lift (put s')
+  return r
 
 runCC :: (s -> s -> s) -> (s -> s -> s) -> [s] -> CC s a -> a
 runCC app min syms m = UF.runUF min syms (evalStateT (mapM_ insertSym [0..length syms-1] >> m) (S IntMap.empty IntMap.empty app))

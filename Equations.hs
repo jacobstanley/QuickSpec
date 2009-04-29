@@ -301,21 +301,43 @@ killSymbols (Var s) = Var s
 killSymbols (Const s) = Const (label s)
 killSymbols (App t u) = App (killSymbols t) (killSymbols u)
 
-prune :: [Symbol] -> Int -> [Term Symbol] -> [(Term Symbol, Term Symbol)] -> [(Term Symbol, Term Symbol)]
-prune ctx d univ es = snd (runCC const const (replicate (length ctx) ()) (runWriterT pruneCC))
-    where pruneCC = do
-            univ' <- fmap (sortBy (comparing (\(d,_,_) -> d))) (mapM f univ)
-            mapM_ (consider univ') es
-          consider univ (t, u) = do
-            t' <- lift (flatten (killSymbols t))
-            u' <- lift (flatten (killSymbols u))
-            b <- lift (t' =?= u')
+prune1 :: Int -> [(Int, Int, Type)] -> [(Term Symbol, Term Symbol)] -> CC () [(Term Symbol, Term Symbol)]
+prune1 d univ es = fmap snd (runWriterT (mapM_ (consider univ) es))
+    where consider univ (t, u) = do
+            b <- lift (canDerive t u)
             when (not b) $ do
               tell [(t, u)]
               lift (consequences d univ (killSymbols t, killSymbols u))
-          f t = do
-            t' <- lift (flatten (killSymbols t))
+
+prune2 :: Int -> [(Int, Int, Type)] -> [(Term Symbol, Term Symbol)] -> [(Term Symbol, Term Symbol)] -> CC () [(Term Symbol, Term Symbol)]
+prune2 d univ committed [] = return committed
+prune2 d univ committed ((t,u):es) = do
+  b <- frozen $ do
+         forM_ (committed ++ es) $ \(t, u) -> consequences d univ (killSymbols t, killSymbols u)
+         canDerive t u
+  if b then prune2 d univ committed es
+       else prune2 d univ ((t,u):committed) es
+
+loadUniv :: [Term Symbol] -> CC a [(Int, Int, Type)]
+loadUniv univ = fmap (sortBy (comparing (\(d,_,_) -> d))) (mapM f univ)
+    where f t = do
+            t' <- flatten (killSymbols t)
             return (depth t, t', typeOf t)
+
+prune :: Context -> Int -> [Term Symbol] -> [(Term Symbol, Term Symbol)] -> [(Term Symbol, Term Symbol)]
+prune ctx d univ0 es = runCCctx ctx $ do
+  univ <- loadUniv univ0
+  es' <- frozen (prune1 d univ es)
+  prune2 d univ [] (reverse (sort es'))
+
+runCCctx :: Context -> CC () a -> a
+runCCctx ctx x = runCC const const (replicate (length ctx) ()) x
+
+canDerive :: Term Symbol -> Term Symbol -> CC () Bool
+canDerive t u = do
+  t' <- flatten (killSymbols t)
+  u' <- flatten (killSymbols u)
+  t' =?= u'
 
 instOf :: Term Symbol -> Term Symbol -> Maybe [(Symbol,Term Symbol)]
 x `instOf` y = [x] `instOfL` [y]
