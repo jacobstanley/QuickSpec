@@ -3,7 +3,7 @@
 module CongruenceClosure(CC, newSym, (=:=), (=?=), rep, reps, runCC, ($$), S) where
 
 import Prelude hiding (lookup)
-import Control.Monad.State
+import Control.Monad.State.Strict
 import Data.IntMap(IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Set(Set)

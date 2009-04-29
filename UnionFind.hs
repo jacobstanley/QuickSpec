@@ -2,7 +2,7 @@ module UnionFind(UF, Replacement((:>)), newSym, (=:=), rep, reps, runUF, S) wher
 
 import Prelude hiding (min)
 import Text.Show.Functions
-import Control.Monad.State
+import Control.Monad.State.Strict
 import Data.IntMap(IntMap)
 import qualified Data.IntMap as IntMap
 
