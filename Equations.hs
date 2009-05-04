@@ -186,14 +186,14 @@ allTerms (n+1) ctx ty = terms ctx (allTerms n ctx) ty
 
 --
 
-iterateUntil :: Eq b => (a -> b) -> (a -> a) -> a -> (Int, a)
-iterateUntil p f x = extract (head (filter eq (zip3 xs (tail xs) [0..])))
+iterateUntil :: Eq b => Int -> (a -> b) -> (a -> a) -> a -> (Int, a)
+iterateUntil start p f x = extract (head (filter eq (drop start (zip3 xs (tail xs) [0..]))))
     where xs = iterate f x
           eq (a, b, _) = p a == p b
           extract (x, _, n) = (n, x)
 
-refine :: Ord b => Int -> (a -> [b]) -> [[a]] -> (Int, [[a]])
-refine step eval xss = flatten (iterateUntil lengths refine1 ([], map (map (\x -> (x, eval x))) xss))
+refine :: Ord b => Int -> Int -> (a -> [b]) -> [[a]] -> (Int, [[a]])
+refine start step eval xss = flatten (iterateUntil start lengths refine1 ([], map (map (\x -> (x, eval x))) xss))
     where flatten (n, (triv, nontriv)) = (n, map (map fst) (triv ++ nontriv))
           refine1 (triv, nontriv) =
               let
@@ -410,7 +410,7 @@ laws ctx0 depth = do
             ]
   vals <- gens ctx
   putStrLn "== classes =="
-  (_, cs) <- bind [testGen i ctx vals . snd | i <- [1..depth-1]] (undefined, const []) >>= test depth ctx vals . snd
+  (_, cs) <- tests depth ctx vals 0
   let eqs = map head
           $ group
           $ sort
@@ -426,23 +426,25 @@ laws ctx0 depth = do
        | (y,x) <- prune ctx depth univ eqs
        ]
 
-bind [] x = return x
-bind (f:fs) x = f x >>= bind fs
-
-test :: Int -> Context -> [Context] -> (Type -> [Term Symbol]) -> IO (Int, [[Term Symbol]])
-test depth ctx vals base = do
+test :: Int -> Context -> [Context] -> Int -> (Type -> [Term Symbol]) -> IO (Int, [[Term Symbol]])
+test depth ctx vals start base = do
   printf "Depth %d: " depth
   let cs0 = filter (not . null) [ terms ctx base ty | ty <- eqTypes ctx ]
   printf "%d terms, " (length (concat cs0))
   let eval' x = [ eval val x | val <- vals ]
-      (n, cs1) = refine 50 eval' cs0
+      (n, cs1) = refine start 50 eval' cs0
       cs = map sort cs1
   printf "%d classes, %d raw equations, %d tests.\n"
          (length cs)
          (sum (map (subtract 1 . length) cs))
          (n*50)
-  return (n*50, cs)
+  return (n, cs)
 
-testGen :: Int -> Context -> [Context] -> (Type -> [Term Symbol]) -> IO (Int, Type -> [Term Symbol])
-testGen depth ctx vals base = do
-  fmap (\(n, cs) -> (n, \ty -> [ t | (t:_) <- cs, typeOf t == ty])) (test depth ctx vals base)
+tests :: Int -> Context -> [Context] -> Int -> IO (Int, [[Term Symbol]])
+tests 0 _ _ _ = return (0, [])
+tests (d+1) ctx vals start = do
+  (n0, cs0) <- tests d ctx vals start
+  let base ty = [ t | (t:_) <- cs0, typeOf t == ty ]
+  (n, cs) <- test (d+1) ctx vals start base
+  (_, cs1) <- tests d ctx vals n
+  if cs0 == cs1 then return (n, cs) else tests (d+1) ctx vals n
