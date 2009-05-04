@@ -101,8 +101,14 @@ instance Show (Term Symbol) where
      showApp p (Const op) [x,y] | isOp op =
        paren p (show' x ++ show op ++ show' y)
 
+     showApp p (Const op) (x:y:xs) | isOp op =
+       paren p (concat (intersperse " " (paren 9 (show' x ++ show op ++ show' y):map show' xs)))
+
      showApp p f xs =
        paren p (concat (intersperse " " (map show' (f:xs))))
+
+show' :: Show a => a -> String
+show' x = showsPrec 1 x ""
 
 instance Show (Term Int) where show = show . foo
 infixl 4 :@
@@ -110,9 +116,6 @@ foo (App f x) = foo f :@ foo x
 foo (Const op) = K op
 foo (Var op) = V op
 data Foo = Foo :@ Foo | K Int | V Symbol deriving Show
-
-show' :: Show a => a -> String
-show' x = showsPrec 1 x ""
 
 infixr 4 :->
 
