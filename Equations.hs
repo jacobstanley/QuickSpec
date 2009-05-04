@@ -392,6 +392,10 @@ alphaRename ctx (x,y)
     , v == oldv
     ]
 
+etaReduce :: (Term Symbol, Term Symbol) -> (Term Symbol, Term Symbol)
+etaReduce (App t (Var x), App u (Var y)) | x == y && x `notElem` vars t = etaReduce (t, u)
+etaReduce (t, u) = (t, u)
+
 --
 
 --main :: IO ()
@@ -419,6 +423,7 @@ laws ctx0 depth = do
           $ group
           $ sort
           $ map (alphaRename ctx)
+          $ map etaReduce
           $ [ (y,x) | (x:xs) <- cs, y <- xs ]
   printf "After alpha renaming: %d raw equations.\n\n" (length eqs)
 --  let univ = concat [allTerms depth ctx t | t <- allTypes ctx]
