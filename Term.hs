@@ -76,8 +76,8 @@ instance Ord (Term Symbol) where
     
     occur t = length (vars t)
     
-    top (Var s)   = Just s
-    top (Const s) = Just s
+    top (Var s)   = Just (0, s)
+    top (Const s) = Just (1, s)
     top _         = Nothing
     
     args (App s t) = [s,t]
