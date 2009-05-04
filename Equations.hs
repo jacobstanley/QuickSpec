@@ -331,7 +331,8 @@ prune :: Context -> Int -> [Term Symbol] -> [(Term Symbol, Term Symbol)] -> [(Te
 prune ctx d univ0 es = runCCctx ctx $ do
   univ <- loadUniv univ0
   es' <- frozen (prune1 d univ es)
-  prune2 d univ [] (reverse (sort es'))
+--  prune2 d univ [] (reverse (sort es'))
+  return es'
 
 runCCctx :: Context -> CC () a -> a
 runCCctx ctx x = runCC const const (replicate (length ctx) ()) x
