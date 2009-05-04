@@ -37,10 +37,11 @@ allTypes ctx = nub
 
 eqTypes :: Context -> [Type]
 eqTypes ctx = filter isEq (allTypes ctx)
-    where
-        isEq (Simple _) = True
-        isEq (TCon _ t) = isEq t
-        isEq _          = False
+
+isEq :: Type -> Bool
+isEq (Simple _) = True
+isEq (TCon _ t) = isEq t
+isEq _          = False
 
 -- example context
 
@@ -413,7 +414,7 @@ laws ctx0 depth = do
             ]
   vals <- gens ctx
   putStrLn "== classes =="
-  (_, cs) <- tests depth ctx vals 0
+  (_, cs, untestable) <- tests depth ctx vals 0
   let eqs = map head
           $ group
           $ sort
@@ -421,7 +422,7 @@ laws ctx0 depth = do
           $ [ (y,x) | (x:xs) <- cs, y <- xs ]
   printf "After alpha renaming: %d raw equations.\n\n" (length eqs)
 --  let univ = concat [allTerms depth ctx t | t <- allTypes ctx]
-  let univ = concat cs
+  let univ = concat cs ++ untestable
   printf "Universe has %d terms.\n" (length univ)
   putStrLn "== equations =="
   sequence_
@@ -443,11 +444,13 @@ test depth ctx vals start base = do
          (n*50)
   return (n, cs)
 
-tests :: Int -> Context -> [Context] -> Int -> IO (Int, [[Term Symbol]])
-tests 0 _ _ _ = return (0, [])
+tests :: Int -> Context -> [Context] -> Int -> IO (Int, [[Term Symbol]], [Term Symbol])
+tests 0 _ _ _ = return (0, [], [])
 tests (d+1) ctx vals start = do
-  (n0, cs0) <- tests d ctx vals start
-  let base ty = [ t | (t:_) <- cs0, typeOf t == ty ]
+  (n0, cs0, untestable) <- tests d ctx vals start
+  let reps = map head cs0 ++ untestable
+      base ty = [ t | t <- reps, typeOf t == ty ]
+      untestable' = concat [ terms ctx base ty | ty <- allTypes ctx, not (isEq ty) ]
   (n, cs) <- test (d+1) ctx vals start base
-  (_, cs1) <- tests d ctx vals n
-  if cs0 == cs1 then return (n, cs) else tests (d+1) ctx vals n
+  (_, cs1, _) <- tests d ctx vals n
+  if cs0 == cs1 then return (n, cs, untestable') else tests (d+1) ctx vals n
