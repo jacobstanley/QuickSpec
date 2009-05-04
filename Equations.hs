@@ -80,6 +80,7 @@ b3 = "c" =:: bool
 
 f = "f" =:: a :-> a
 g = "g" =:: a :-> a
+h = "h" =:: a :-> a
 
 plus = "+" =:: int :-> int :-> int
     =: Fun (\(Int x) -> Fun (\(Int y) -> Int (x + y)))
@@ -144,7 +145,7 @@ comp = "." =:: (a :-> a) :-> (a :-> a) :-> (a :-> a)
 ident = "id" =:: (a :-> a) =: Fun id
 
 lists :: Context
-lists = [ nil, app, rev, srt, mapp, comp, ident, f, g, xs, ys, zs ]
+lists = [ nil, app, rev, srt, mapp, comp, ident, f, g, h, xs, ys, zs ]
 
 lists' :: Context
 lists' = [ nil, app, rev, srt, xs ]
