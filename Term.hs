@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances, StandaloneDeriving #-}
 module Term where
 
 import Data.Ord
@@ -103,6 +103,13 @@ instance Show (Term Symbol) where
 
      showApp p f xs =
        paren p (concat (intersperse " " (map show' (f:xs))))
+
+instance Show (Term Int) where show = show . foo
+infixl 4 :@
+foo (App f x) = foo f :@ foo x
+foo (Const op) = K op
+foo (Var op) = V op
+data Foo = Foo :@ Foo | K Int | V Symbol deriving Show
 
 show' :: Show a => a -> String
 show' x = showsPrec 1 x ""
