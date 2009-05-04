@@ -140,8 +140,10 @@ mapp = "map" =:: (a :-> a) :-> list a :-> list a
 comp = "." =:: (a :-> a) :-> (a :-> a) :-> (a :-> a)
      =: Fun (\(Fun f) -> Fun (\(Fun g) -> Fun (f . g)))
 
+ident = "id" =:: (a :-> a) =: Fun id
+
 lists :: Context
-lists = [ nil, app, rev, srt, xs, ys, zs ]
+lists = [ nil, app, rev, srt, mapp, comp, ident, f, g, xs, ys, zs ]
 
 lists' :: Context
 lists' = [ nil, app, rev, srt, xs ]
@@ -394,7 +396,7 @@ alphaRename ctx (x,y)
 --main :: IO ()
 main =
   do hSetBuffering stdout NoBuffering
-     laws bools 3
+     laws lists 3
 
 laws ctx0 depth = do
   let ctx = zipWith relabel [0..] ctx0
