@@ -394,7 +394,7 @@ alphaRename ctx (x,y)
     ]
 
 etaReduce :: (Term Symbol, Term Symbol) -> (Term Symbol, Term Symbol)
-etaReduce (App t (Var x), App u (Var y)) | x == y && x `notElem` vars t = etaReduce (t, u)
+etaReduce (App t (Var x), App u (Var y)) | x == y && x `notElem` vars t && x `notElem` vars u = etaReduce (t, u)
 etaReduce (t, u) = (t, u)
 
 --
