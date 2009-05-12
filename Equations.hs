@@ -1,6 +1,7 @@
 module Main where
 
 import Control.Monad
+import Control.Monad.State
 import Control.Monad.Writer
 import Data.List
 import qualified Data.Map as M
@@ -11,7 +12,7 @@ import System.IO.Unsafe(unsafeInterleaveIO)
 import System.Random
 import Text.Printf
 import Term
-import CongruenceClosure
+import CongruenceClosure hiding (newSym)
 
 -- Context
 
@@ -187,6 +188,40 @@ iterateUntil start p f x = extract (head (filter eq (drop start (zip3 xs (tail x
     where xs = iterate f x
           eq (a, b, _) = p a == p b
           extract (x, _, n) = (n, x)
+
+type Symgen = State ([Symbol], [Symbol], Int)
+newSym :: Type -> Symgen Symbol
+newSym ty = do
+  (avail, used, next) <- get
+  case partition (\s -> typ s == ty) avail of
+    ([], _) -> do
+      let sym = Symbol undefined next ty Nothing
+      put (avail, sym:used, next+1)
+      return sym
+    ((sym:ss), rest) -> do
+      put (ss ++ rest, sym:used, next)
+      return sym
+reset :: Symgen ()
+reset = do
+  (avail, used, next) <- get
+  put (avail ++ used, [], next)
+
+saturate :: Term Symbol -> Symgen (Term Symbol)
+saturate t =
+    case typeOf t of
+      t1 :-> t2 -> do
+        sym <- newSym t1
+        saturate (App t (Var sym))
+      _ -> return t
+
+saturateAll :: Context -> [[Term Symbol]] -> (Context, [[(Term Symbol, Term Symbol)]])
+saturateAll ctx ts = (ctx', ts')
+    where ctx' = ctx ++ avail ++ used
+          (ts', (avail, used, _)) = runState (mapM (mapM f) ts) ([], [], length ctx)
+          f t = do
+            reset
+            t' <- saturate t
+            return (t, t')
 
 refine :: Ord b => Int -> Int -> (a -> [b]) -> [[a]] -> (Int, [[a]])
 refine start step eval xss = flatten (iterateUntil start lengths refine1 ([], map (map (\x -> (x, eval x))) xss))
@@ -424,13 +459,14 @@ laws ctx0 depth = do
        ]
 
 test :: Int -> Context -> [Context] -> Int -> (Type -> [Term Symbol]) -> IO (Int, [[Term Symbol]])
-test depth ctx vals start base = do
+test depth ctx0 vals start base = do
   printf "Depth %d: " depth
-  let cs0 = filter (not . null) [ terms ctx base ty | ty <- allTypes ctx ]
+  let (ctx, cs0) = saturateAll ctx0 (filter (not . null) [ terms ctx0 base ty | ty <- allTypes ctx0 ])
+  vals <- gens ctx
   printf "%d terms, " (length (concat cs0))
-  let eval' x = [ eval val x | val <- vals ]
+  let eval' (_, x) = [ eval val x | val <- vals ]
       (n, cs1) = refine start 50 eval' cs0
-      cs = map sort cs1
+      cs = map (sort . map fst) cs1
   printf "%d classes, %d raw equations, %d tests.\n"
          (length cs)
          (sum (map (subtract 1 . length) cs))
@@ -444,5 +480,6 @@ tests (d+1) ctx vals start = do
   let reps = map head cs0
       base ty = [ t | t <- reps, typeOf t == ty ]
   (n, cs) <- test (d+1) ctx vals start base
-  (_, cs1) <- tests d ctx vals n
-  if cs0 == cs1 then return (n, cs) else tests (d+1) ctx vals n
+--  (_, cs1) <- tests d ctx vals n
+  return (n, cs)
+--  if cs0 == cs1 then return (n, cs) else tests (d+1) ctx vals n
