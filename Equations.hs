@@ -35,14 +35,6 @@ allTypes ctx = nub
   , t <- tps (typ elt)
   ]
 
-eqTypes :: Context -> [Type]
-eqTypes ctx = filter isEq (allTypes ctx)
-
-isEq :: Type -> Bool
-isEq (Simple _) = True
-isEq (TCon _ t) = isEq t
-isEq _          = False
-
 -- example context
 
 list :: Type -> Type
@@ -415,7 +407,7 @@ laws ctx0 depth = do
             ]
   vals <- gens ctx
   putStrLn "== classes =="
-  (_, cs, untestable) <- tests depth ctx vals 0
+  (_, cs) <- tests depth ctx vals 0
   let eqs = map head
           $ group
           $ sort
@@ -423,7 +415,7 @@ laws ctx0 depth = do
           $ [ (y,x) | (x:xs) <- cs, y <- xs ]
   printf "After alpha renaming: %d raw equations.\n\n" (length eqs)
 --  let univ = concat [allTerms depth ctx t | t <- allTypes ctx]
-  let univ = concat cs ++ untestable
+  let univ = concat cs
   printf "Universe has %d terms.\n" (length univ)
   putStrLn "== equations =="
   sequence_
@@ -434,7 +426,7 @@ laws ctx0 depth = do
 test :: Int -> Context -> [Context] -> Int -> (Type -> [Term Symbol]) -> IO (Int, [[Term Symbol]])
 test depth ctx vals start base = do
   printf "Depth %d: " depth
-  let cs0 = filter (not . null) [ terms ctx base ty | ty <- eqTypes ctx ]
+  let cs0 = filter (not . null) [ terms ctx base ty | ty <- allTypes ctx ]
   printf "%d terms, " (length (concat cs0))
   let eval' x = [ eval val x | val <- vals ]
       (n, cs1) = refine start 50 eval' cs0
@@ -445,13 +437,12 @@ test depth ctx vals start base = do
          (n*50)
   return (n, cs)
 
-tests :: Int -> Context -> [Context] -> Int -> IO (Int, [[Term Symbol]], [Term Symbol])
-tests 0 _ _ _ = return (0, [], [])
+tests :: Int -> Context -> [Context] -> Int -> IO (Int, [[Term Symbol]])
+tests 0 _ _ _ = return (0, [])
 tests (d+1) ctx vals start = do
-  (n0, cs0, untestable) <- tests d ctx vals start
-  let reps = map head cs0 ++ untestable
+  (n0, cs0) <- tests d ctx vals start
+  let reps = map head cs0
       base ty = [ t | t <- reps, typeOf t == ty ]
-      untestable' = concat [ terms ctx base ty | ty <- allTypes ctx, not (isEq ty) ]
   (n, cs) <- test (d+1) ctx vals start base
-  (_, cs1, _) <- tests d ctx vals n
-  if cs0 == cs1 then return (n, cs, untestable') else tests (d+1) ctx vals n
+  (_, cs1) <- tests d ctx vals n
+  if cs0 == cs1 then return (n, cs) else tests (d+1) ctx vals n
