@@ -278,9 +278,7 @@ genType :: Type -> Gen Data
 genType (Simple "A") = fmap (Int . abs) arbitrary 
 genType (Simple "Int") = fmap Int arbitrary
 genType (Simple "Bool") = fmap Bool arbitrary
-genType (TCon "[]" t) = sized $ \n -> do
-    do k <- choose (0, n)
-       fmap List (sequence [ genType t | _ <- [1..k] ])
+genType (TCon "[]" t) = fmap List (listOf (genType t))
 genType (_ :-> t) = fmap Fun (genFunction (const t))
 genType t =
   error ("could not generate a " ++ show t)
