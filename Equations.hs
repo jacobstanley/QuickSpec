@@ -264,7 +264,11 @@ genType t =
   error ("could not generate a " ++ show t)
 
 valuationsIO :: IO Valuations
-valuationsIO = sample' valuation
+valuationsIO =
+    unsafeInterleaveIO $ do
+      vs <- fmap (take 10) (sample' valuation)
+      vss <- valuationsIO
+      return (vs ++ vss)
 
 --
 
