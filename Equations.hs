@@ -191,15 +191,22 @@ iterateUntil start p f x = extract (head (filter eq (drop start (zip3 xs (tail x
           eq (a, b, _) = p a == p b
           extract (x, _, n) = (n, x)
 
-type Symgen = State Int
+type Symgen = State ([Symbol], [Symbol], Int)
 newSym :: Type -> Symgen Symbol
 newSym ty = do
-  n <- get
-  put (n+1)
-  return (Symbol undefined n ty Nothing)
-
-saturate :: Context -> Term Symbol -> Term Symbol
-saturate ctx t = evalState (saturateS (typeOf t)) (length ctx) t
+  (avail, used, n) <- get
+  case partition (\s -> typ s == ty) avail of
+    ([], _) -> do
+      let sym = Symbol undefined n ty Nothing
+      put (avail, sym:used, n+1)
+      return sym
+    ((sym:ss), ss') -> do
+      put (ss++ss', sym:used, n)
+      return sym
+reset :: Symgen ()
+reset = do
+  (avail, used, n) <- get
+  put (avail ++ used, [], n)
 
 saturateS :: Type -> Symgen (Term Symbol -> Term Symbol)
 saturateS (t1 :-> t2) = do
@@ -207,6 +214,22 @@ saturateS (t1 :-> t2) = do
   f <- saturateS t2
   return (\x -> f (x `App` Var sym))
 saturateS _ = return id
+
+saturateClasses :: Context -> [[Term Symbol]] -> (Context, [[(Term Symbol, Term Symbol)]])
+saturateClasses ctx cs = evalState f ([], [], length ctx)
+    where f = do
+            cs' <- mapM saturateClass cs
+            (avail, used, _) <- get
+            return (ctx ++ avail ++ used, cs')
+          saturateClass c = do
+            reset
+            f <- saturateS (typeOf (head c))
+            return (map (\x -> (x, f x)) c)
+
+memoAt :: Eq a => [a] -> (a -> b) -> (a -> b)
+memoAt xs f = f'
+    where f' x = fromJust (lookup x tab)
+          tab = map (\x -> (x, f x)) xs
 
 refine :: Ord b => Int -> Int -> (a -> [b]) -> [[a]] -> (Int, [[a]])
 refine start step eval xss = flatten (iterateUntil start lengths refine1 ([], map (map (\x -> (x, eval x))) xss))
@@ -430,9 +453,10 @@ laws ctx0 depth = do
 test :: Int -> Context -> Valuations -> Int -> (Type -> [Term Symbol]) -> IO (Int, [[Term Symbol]])
 test depth ctx vals start base = do
   printf "Depth %d: " depth
-  let cs0 = filter (not . null) [ map (\x -> (x, saturate ctx x)) (terms ctx base ty) | ty <- allTypes ctx ]
+  let (ctx', cs0) = saturateClasses ctx (filter (not . null) [ terms ctx base ty | ty <- allTypes ctx ])
   printf "%d terms, " (length (concat cs0))
-  let eval' (_, x) = [ eval ctx val x | val <- vals ]
+  let vals' = map (memoAt ctx') vals
+      eval' (_, x) = [ eval ctx val x | val <- vals' ]
       (n, cs1) = refine start 50 eval' cs0
       cs = map (sort . map fst) cs1
   printf "%d classes, %d raw equations, %d tests.\n"
