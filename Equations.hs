@@ -1,3 +1,4 @@
+{-# LANGUAGE RelaxedPolyRec #-}
 module Main where
 
 import Control.Monad
@@ -10,6 +11,7 @@ import Data.Ord
 import System.IO
 import System.IO.Unsafe(unsafeInterleaveIO)
 import System.Random
+import Test.QuickCheck hiding (label)
 import Text.Printf
 import Term
 import CongruenceClosure hiding (newSym)
@@ -19,11 +21,11 @@ import CongruenceClosure hiding (newSym)
 type Context
   = [Symbol]
 
-eval :: Context -> Term Symbol -> Data
-eval ctx (Const s) = head ([ fromJust (what elt) | elt <- ctx, elt == s ] ++ error ("eval, no " ++ show s))
-eval ctx (Var s) = head ([ fromJust (what elt) | elt <- ctx, elt == s ] ++ error ("eval, no " ++ show s))
-eval ctx (App s t) = case eval ctx s of
-                       Fun f -> f (eval ctx t)
+eval :: Context -> Valuation -> Term Symbol -> Data
+eval ctx val (Const s) = head ([ fromJust (what elt) | elt <- ctx, elt == s ] ++ error ("eval, no " ++ show s))
+eval ctx val (Var s) = val s
+eval ctx val (App s t) = case eval ctx val s of
+                       Fun f -> f (eval ctx val t)
 
 allTypes :: Context -> [Type]
 allTypes ctx = nub
@@ -216,7 +218,7 @@ saturate t =
 
 saturateAll :: Context -> [[Term Symbol]] -> (Context, [[(Term Symbol, Term Symbol)]])
 saturateAll ctx ts = (ctx', ts')
-    where ctx' = ctx ++ avail ++ used
+    where ctx' = avail ++ used
           (ts', (avail, used, _)) = runState (mapM (mapM f) ts) ([], [], length ctx)
           f t = do
             reset
@@ -240,65 +242,45 @@ refine start step eval xss = flatten (iterateUntil start lengths refine1 ([], ma
           split xs = map (map next) (groupBy (\a b -> first a == first b)
                                              (sortBy (comparing first) xs))
 
-gens :: Context -> IO [Context]
-gens ctx = unsafeInterleaveIO $ do
-             ctx' <- gen ctx
-             ctxs <- gens ctx
-             return (ctx':ctxs)
+type Valuation = Symbol -> Data
 
-gen :: Context -> IO Context
-gen ctx =
-  sequence
-    [ case what elt of
-        Just _  -> do return elt
-        Nothing -> do a <- genType (typ elt)
-                      return elt{ what = Just a }
-    | elt <- ctx
-    ]
+instance CoArbitrary Symbol where
+    coarbitrary s g = variant (label s) g
 
-genInt :: IO Int
-genInt = 
-  do k <- genNat
-     n <- randomRIO (-(k*k),k*k)
-     return n
+instance Arbitrary Data where
+    arbitrary = oneof [
+                 fmap Int arbitrary,
+                 fmap Bool arbitrary,
+                 fmap List arbitrary,
+                 fmap Fun arbitrary
+                 ]
 
-genNat :: IO Int
-genNat = 
-  do n <- randomRIO (0,100)
-     k <- randomRIO (0,n)
-     randomRIO (0,k)
+instance CoArbitrary Data where
+    coarbitrary (Int n) = variant 0 . coarbitrary n
+    coarbitrary (Bool b) = variant 1 . coarbitrary b
+    coarbitrary (List xs) = variant 2 . coarbitrary xs
+    coarbitrary (Fun f) = variant 3 . coarbitrary f
 
--- this is a big hack for now
-genType :: Type -> IO Data
-genType (Simple "A") =
-  do n <- genNat
-     return (Int n)
+genFunction :: CoArbitrary a => (a -> Type) -> Gen (a -> Data)
+genFunction ty = promote (\x -> x `coarbitrary` genType (ty x)) 
 
-genType (Simple "Int") =
-  do n <- genInt
-     return (Int n)
+valuation :: Gen Valuation
+valuation = genFunction typ
 
-genType (Simple "Bool") =
-  do n <- randomRIO (0,1 :: Int)
-     return (Bool (even n))
-
+genType :: Type -> Gen Data
+genType (Simple "A") = fmap (Int . abs) arbitrary 
+genType (Simple "Int") = fmap Int arbitrary
+genType (Simple "Bool") = fmap Bool arbitrary
 genType (TCon "[]" t) =
-  do k <- genNat
+  do k <- choose (0, 20 :: Int)
      xs <- sequence [ genType t | i <- [1..k] ]
      return (List xs)
-
-genType (Simple "Int" :-> t) =
-  do k  <- (1+) `fmap` genNat
-     ys <- sequence [ genType t | i <- [0..k*k] ]
-     return (Fun (\(Int x) -> ys !! (x `mod` (k*k))))
-
-genType (Simple "A" :-> t) =
-  do k  <- (1+) `fmap` genNat
-     ys <- sequence [ genType t | i <- [0..k*k] ]
-     return (Fun (\(Int x) -> ys !! (x `mod` (k*k))))
-
+genType (_ :-> t) = fmap Fun (genFunction (const t))
 genType t =
   error ("could not generate a " ++ show t)
+
+valuationsIO :: IO [Valuation]
+valuationsIO = sample' valuation
 
 --
 
@@ -440,7 +422,7 @@ laws ctx0 depth = do
             | elt <- ctx
             , isNothing (what elt)
             ]
-  vals <- gens ctx
+  vals <- valuationsIO
   putStrLn "== classes =="
   (_, cs) <- tests depth ctx vals 0
   let eqs = map head
@@ -458,13 +440,26 @@ laws ctx0 depth = do
        | (y,x) <- prune ctx depth univ eqs
        ]
 
-test :: Int -> Context -> [Context] -> Int -> (Type -> [Term Symbol]) -> IO (Int, [[Term Symbol]])
+-- To test with depth optimisation at d+1:
+--   1. Test at d, get a context and valuation.
+--   2. Saturate at d+1.
+--   3. If the context is different, then restart with the new context and a new valuation.
+--   4. Otherwise, see if testing at d will give the same classes.
+--   5. If the result is different, then restart with more tests.
+-- So we need two testing primitives:
+--   1. Saturate, generate a new valuation.
+--   2. Replay an existing valuation.
+-- To test at d+1: test at d, run some tests, replay at d.
+-- To replay at d+1: ???
+-- Extra primitive: add a symbol to a valuation.
+
+test :: Int -> Context -> [Valuation] -> Int -> (Type -> [Term Symbol]) -> IO (Int, [[Term Symbol]])
 test depth ctx0 vals start base = do
   printf "Depth %d: " depth
   let (ctx, cs0) = saturateAll ctx0 (filter (not . null) [ terms ctx0 base ty | ty <- allTypes ctx0 ])
-  vals <- gens ctx
+  vals <- valuationsIO
   printf "%d terms, " (length (concat cs0))
-  let eval' (_, x) = [ eval val x | val <- vals ]
+  let eval' (_, x) = [ eval ctx0 val x | val <- vals ]
       (n, cs1) = refine start 50 eval' cs0
       cs = map (sort . map fst) cs1
   printf "%d classes, %d raw equations, %d tests.\n"
@@ -473,7 +468,7 @@ test depth ctx0 vals start base = do
          (n*50)
   return (n, cs)
 
-tests :: Int -> Context -> [Context] -> Int -> IO (Int, [[Term Symbol]])
+tests :: Int -> Context -> [Valuation] -> Int -> IO (Int, [[Term Symbol]])
 tests 0 _ _ _ = return (0, [])
 tests (d+1) ctx vals start = do
   (n0, cs0) <- tests d ctx vals start
