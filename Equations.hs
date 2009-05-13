@@ -191,39 +191,22 @@ iterateUntil start p f x = extract (head (filter eq (drop start (zip3 xs (tail x
           eq (a, b, _) = p a == p b
           extract (x, _, n) = (n, x)
 
-type Symgen = State ([Symbol], [Symbol], Int)
+type Symgen = State Int
 newSym :: Type -> Symgen Symbol
 newSym ty = do
-  (avail, used, next) <- get
-  case partition (\s -> typ s == ty) avail of
-    ([], _) -> do
-      let sym = Symbol undefined next ty Nothing
-      put (avail, sym:used, next+1)
-      return sym
-    ((sym:ss), rest) -> do
-      put (ss ++ rest, sym:used, next)
-      return sym
-reset :: Symgen ()
-reset = do
-  (avail, used, next) <- get
-  put (avail ++ used, [], next)
+  n <- get
+  put (n+1)
+  return (Symbol undefined n ty Nothing)
 
-saturate :: Term Symbol -> Symgen (Term Symbol)
-saturate t =
-    case typeOf t of
-      t1 :-> t2 -> do
-        sym <- newSym t1
-        saturate (App t (Var sym))
-      _ -> return t
+saturate :: Context -> Term Symbol -> Term Symbol
+saturate ctx t = evalState (saturateS (typeOf t)) (length ctx) t
 
-saturateAll :: Context -> [[Term Symbol]] -> (Context, [[(Term Symbol, Term Symbol)]])
-saturateAll ctx ts = (ctx', ts')
-    where ctx' = avail ++ used
-          (ts', (avail, used, _)) = runState (mapM (mapM f) ts) ([], [], length ctx)
-          f t = do
-            reset
-            t' <- saturate t
-            return (t, t')
+saturateS :: Type -> Symgen (Term Symbol -> Term Symbol)
+saturateS (t1 :-> t2) = do
+  sym <- newSym t1
+  f <- saturateS t2
+  return (\x -> f (x `App` Var sym))
+saturateS _ = return id
 
 refine :: Ord b => Int -> Int -> (a -> [b]) -> [[a]] -> (Int, [[a]])
 refine start step eval xss = flatten (iterateUntil start lengths refine1 ([], map (map (\x -> (x, eval x))) xss))
@@ -243,6 +226,7 @@ refine start step eval xss = flatten (iterateUntil start lengths refine1 ([], ma
                                              (sortBy (comparing first) xs))
 
 type Valuation = Symbol -> Data
+type Valuations = [Valuation]
 
 instance CoArbitrary Symbol where
     coarbitrary s g = variant (label s) g
@@ -279,7 +263,7 @@ genType (_ :-> t) = fmap Fun (genFunction (const t))
 genType t =
   error ("could not generate a " ++ show t)
 
-valuationsIO :: IO [Valuation]
+valuationsIO :: IO Valuations
 valuationsIO = sample' valuation
 
 --
@@ -440,26 +424,12 @@ laws ctx0 depth = do
        | (y,x) <- prune ctx depth univ eqs
        ]
 
--- To test with depth optimisation at d+1:
---   1. Test at d, get a context and valuation.
---   2. Saturate at d+1.
---   3. If the context is different, then restart with the new context and a new valuation.
---   4. Otherwise, see if testing at d will give the same classes.
---   5. If the result is different, then restart with more tests.
--- So we need two testing primitives:
---   1. Saturate, generate a new valuation.
---   2. Replay an existing valuation.
--- To test at d+1: test at d, run some tests, replay at d.
--- To replay at d+1: ???
--- Extra primitive: add a symbol to a valuation.
-
-test :: Int -> Context -> [Valuation] -> Int -> (Type -> [Term Symbol]) -> IO (Int, [[Term Symbol]])
-test depth ctx0 vals start base = do
+test :: Int -> Context -> Valuations -> Int -> (Type -> [Term Symbol]) -> IO (Int, [[Term Symbol]])
+test depth ctx vals start base = do
   printf "Depth %d: " depth
-  let (ctx, cs0) = saturateAll ctx0 (filter (not . null) [ terms ctx0 base ty | ty <- allTypes ctx0 ])
-  vals <- valuationsIO
+  let cs0 = filter (not . null) [ map (\x -> (x, saturate ctx x)) (terms ctx base ty) | ty <- allTypes ctx ]
   printf "%d terms, " (length (concat cs0))
-  let eval' (_, x) = [ eval ctx0 val x | val <- vals ]
+  let eval' (_, x) = [ eval ctx val x | val <- vals ]
       (n, cs1) = refine start 50 eval' cs0
       cs = map (sort . map fst) cs1
   printf "%d classes, %d raw equations, %d tests.\n"
@@ -468,13 +438,12 @@ test depth ctx0 vals start base = do
          (n*50)
   return (n, cs)
 
-tests :: Int -> Context -> [Valuation] -> Int -> IO (Int, [[Term Symbol]])
+tests :: Int -> Context -> Valuations -> Int -> IO (Int, [[Term Symbol]])
 tests 0 _ _ _ = return (0, [])
 tests (d+1) ctx vals start = do
   (n0, cs0) <- tests d ctx vals start
   let reps = map head cs0
       base ty = [ t | t <- reps, typeOf t == ty ]
   (n, cs) <- test (d+1) ctx vals start base
---  (_, cs1) <- tests d ctx vals n
-  return (n, cs)
---  if cs0 == cs1 then return (n, cs) else tests (d+1) ctx vals n
+  (_, cs1) <- tests d ctx vals n
+  if cs0 == cs1 then return (n, cs) else tests (d+1) ctx vals n
