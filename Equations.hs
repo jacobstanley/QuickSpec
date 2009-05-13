@@ -73,9 +73,9 @@ b1 = "a" =:: bool
 b2 = "b" =:: bool
 b3 = "c" =:: bool
 
-f = "f" =:: a :-> a
-g = "g" =:: a :-> a
-h = "h" =:: a :-> a
+f a = "f" =:: a :-> a
+g a = "g" =:: a :-> a
+h a = "h" =:: a :-> a
 
 plus = "+" =:: int :-> int :-> int
     =: Fun (\(Int x) -> Fun (\(Int y) -> Int (x + y)))
@@ -134,13 +134,13 @@ nil  = "[]" =:: list a
 mapp = "map" =:: (a :-> a) :-> list a :-> list a
      =: Fun (\(Fun f) -> Fun (\(List xs) -> List (map f xs)))
 
-comp = "." =:: (a :-> a) :-> (a :-> a) :-> (a :-> a)
+comp a = "." =:: (a :-> a) :-> (a :-> a) :-> (a :-> a)
      =: Fun (\(Fun f) -> Fun (\(Fun g) -> Fun (f . g)))
 
-ident = "id" =:: (a :-> a) =: Fun id
+ident a = "id" =:: (a :-> a) =: Fun id
 
 lists :: Context
-lists = [ nil, app, rev, srt, mapp, comp, ident, f, g, h, xs, ys, zs, a1, b, c ]
+lists = [ nil, app, rev, srt, mapp, comp a, ident a, comp (list a), ident (list a), xs, ys, zs, a1, b, c ]
 
 lists' :: Context
 lists' = [ nil, app, rev, srt, xs ]
