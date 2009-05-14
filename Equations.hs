@@ -443,10 +443,19 @@ laws ctx0 depth = do
   let univ = concat cs
   printf "Universe has %d terms.\n" (length univ)
   putStrLn "== equations =="
+  let pruned = prune ctx depth univ eqs
   sequence_
        [ putStrLn (show y ++ " = " ++ show x)
-       | (y,x) <- prune ctx depth univ eqs
+       | (y,x) <- pruned
        ]
+  forM pruned $ \(y, x) -> do
+    let freeVars = vars y `intersect` vars x
+        xs `isSubsetOf` ys = sort xs `isPrefixOf` sort ys
+    when (not (vars y `isSubsetOf` vars x || vars x `isSubsetOf` vars y)) $
+         printf "*** missing term with value %s = %s in vars %s\n"
+                (show y)
+                (show x)
+                (show freeVars)
 
 test :: Int -> Context -> Valuations -> Int -> (Type -> [Term Symbol]) -> IO (Int, [[Term Symbol]])
 test depth ctx vals start base = do
