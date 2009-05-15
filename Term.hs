@@ -69,6 +69,11 @@ vars (App s t) = nub (vars s ++ vars t)
 vars (Var s)   = [s]
 vars _         = []
 
+mapVars :: (Symbol -> Symbol) -> Term a -> Term a
+mapVars f (Const k) = Const k
+mapVars f (Var v) = Var (f v)
+mapVars f (App t u) = App (mapVars f t) (mapVars f u)
+
 instance Ord (Term Symbol) where
   s `compare` t = stamp s `compare` stamp t
    where

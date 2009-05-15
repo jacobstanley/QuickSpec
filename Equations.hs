@@ -449,13 +449,10 @@ laws ctx0 depth = do
        | (y,x) <- pruned
        ]
   forM pruned $ \(y, x) -> do
-    let freeVars = vars y `intersect` vars x
-        xs `isSubsetOf` ys = sort xs `isPrefixOf` sort ys
+    let xs `isSubsetOf` ys = sort xs `isPrefixOf` sort ys
     when (not (vars y `isSubsetOf` vars x || vars x `isSubsetOf` vars y)) $
-         printf "*** missing term with value %s = %s in vars %s\n"
-                (show y)
-                (show x)
-                (show freeVars)
+         printf "*** missing term with value %s\n"
+                (show (mapVars (\s -> if s `elem` vars y then s else s { name = "_" }) x))
 
 test :: Int -> Context -> Valuations -> Int -> (Type -> [Term Symbol]) -> IO (Int, [[Term Symbol]])
 test depth ctx vals start base = do
