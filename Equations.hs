@@ -449,7 +449,11 @@ laws ctx0 depth = do
        | (y,x) <- pruned
        ]
   forM pruned $ \(y, x) -> do
-    let xs `isSubsetOf` ys = sort xs `isPrefixOf` sort ys
+    let xs `isSubsetOf` ys = sort xs `isSublistOf` sort ys
+        [] `isSublistOf` _ = True
+        (x:xs) `isSublistOf` [] = False
+        (x:xs) `isSublistOf` (y:ys) | x == y = xs `isSublistOf` ys
+                                    | otherwise = (x:xs) `isSublistOf` ys
     when (not (vars y `isSubsetOf` vars x || vars x `isSubsetOf` vars y)) $
          printf "*** missing term with value %s\n"
                 (show (mapVars (\s -> if s `elem` vars y then s else s { name = "_" }) x))
