@@ -28,7 +28,7 @@ relabel l e = e { label = l }
 
 isOp :: Symbol -> Bool
 isOp s | isCon s && name s == "[]" = False
-isOp s | isCon s = not (all isAlpha (name s))
+isOp s | isCon s = not (all isAlphaNum (name s))
 isOp _            = False
 
 data Term c
