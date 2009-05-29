@@ -390,28 +390,6 @@ subst sub s         = s
 
 --
 
-alphaRename :: Context -> (Term Symbol,Term Symbol) -> (Term Symbol,Term Symbol)
-alphaRename ctx (x,y)
-  | x' < y'   = (y',x')
-  | otherwise = (x',y')
- where
-  x' = subst sub x
-  y' = subst sub y
- 
-  vs = nub (vars x ++ vars y)
-  sub = [ (v, Var (alpha v))
-        | v <- vs
-        ]
-  alpha v =
-    head
-    [ newv
-    | (oldv,newv) <- [ w | w <- vs, typ w == typ v ]
-               `zip` [ elt | elt <- ctx, isNothing (what elt), typ elt == typ v ]
-    , v == oldv
-    ]
-
---
-
 --main :: IO ()
 main =
   do hSetBuffering stdout NoBuffering
@@ -436,9 +414,8 @@ laws ctx0 depth = do
   let eqs = map head
           $ group
           $ sort
-          $ map (alphaRename ctx)
           $ [ (y,x) | (x:xs) <- cs, y <- xs ]
-  printf "After alpha renaming: %d raw equations.\n\n" (length eqs)
+  printf "%d raw equations.\n\n" (length eqs)
 --  let univ = concat [allTerms depth ctx t | t <- allTypes ctx]
   let univ = concat cs
   printf "Universe has %d terms.\n" (length univ)
