@@ -1,16 +1,13 @@
 {-# LANGUAGE RelaxedPolyRec #-}
 module Main where
 
-import Control.Monad
 import Control.Monad.State
 import Control.Monad.Writer
 import Data.List
-import qualified Data.Map as M
 import Data.Maybe
 import Data.Ord
 import System.IO
 import System.IO.Unsafe(unsafeInterleaveIO)
-import System.Random
 import Test.QuickCheck hiding (label)
 import Text.Printf
 import Term
