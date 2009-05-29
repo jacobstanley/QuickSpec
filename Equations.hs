@@ -149,7 +149,7 @@ ints :: Context
 ints = [ plus, mult, x, y, z, zero, one ]
 
 bools :: Context
-bools = [ bor, band, bnot, false, true, b1, b2, b3 ]
+bools = [ bor, band, bnot, b1, b2, b3 ]
 
 bools2 = [ band, b1, b2 ]
 
@@ -415,7 +415,7 @@ alphaRename ctx (x,y)
 --main :: IO ()
 main =
   do hSetBuffering stdout NoBuffering
-     laws lists 3
+     laws bools 3
 
 laws ctx0 depth = do
   let ctx = zipWith relabel [0..] ctx0
