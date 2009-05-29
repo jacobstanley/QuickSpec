@@ -456,7 +456,7 @@ laws ctx0 depth = do
                                     | otherwise = (x:xs) `isSublistOf` ys
     when (not (vars y `isSubsetOf` vars x || vars x `isSubsetOf` vars y)) $
          printf "*** missing term with value %s\n"
-                (show (mapVars (\s -> if s `elem` vars y then s else s { name = "_" }) x))
+                (show (mapVars (\s -> if s `elem` vars y then s else s { name = "_" ++ name s }) x))
 
 test :: Int -> Context -> Valuations -> Int -> (Type -> [Term Symbol]) -> IO (Int, [[Term Symbol]])
 test depth ctx vals start base = do
