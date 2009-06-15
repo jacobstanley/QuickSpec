@@ -414,7 +414,7 @@ laws ctx0 depth = do
           $ [ (y,x) | (x:xs) <- cs, y <- xs ]
   printf "%d raw equations.\n\n" (length eqs)
 --  let univ = concat [allTerms depth ctx t | t <- allTypes ctx]
-  let univ = concat cs
+  let univ = map head cs
   printf "Universe has %d terms.\n" (length univ)
   putStrLn "== equations =="
   let pruned = prune ctx depth univ eqs
