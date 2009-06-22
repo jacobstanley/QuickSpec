@@ -45,8 +45,6 @@ s =:= t = do
     return (Just (rs :> rt))
    else return Nothing
 
-s =?= t = liftM2 (==) (rep s) (rep t)
-
 rep :: Int -> UF s (Int, s)
 rep t = do
   m <- fmap links get

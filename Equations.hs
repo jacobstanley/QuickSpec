@@ -1,42 +1,20 @@
 {-# LANGUAGE GADTs #-}
 module Main where
 
-import Control.Monad.State
 import Control.Monad.Writer
 import Data.List
-import Data.Maybe
 import Data.Ord
 import Data.Typeable
 import System.IO
-import System.IO.Unsafe(unsafeInterleaveIO)
 import System.Random
-import Test.QuickCheck hiding (label)
-import Test.QuickCheck.Gen
 import Text.Printf
 import Term
-import CongruenceClosure hiding (newSym)
+import CongruenceClosure
 
--- Context
+-- Term generation.
 
 type Context = [Symbol]
 type Universe = TypeRep -> [Term Symbol]
-
-resultTypes :: TypeRep -> [TypeRep]
-resultTypes ty =
-  case splitTyConApp ty of
-    (c, [_, ty']) | tyConString c == "->" -> ty:resultTypes ty'
-    _ -> [ty]
-
-allTypes :: Context -> [TypeRep]
-allTypes ctx = nub (concatMap (resultTypes . symbolType) ctx)
-
-argTypes :: Context -> TypeRep -> [TypeRep]
-argTypes ctx ty = [ ty1 | funcTy <- allTypes ctx,
-                          (c, [ty1, ty2]) <- [splitTyConApp funcTy],
-                          tyConString c == "->",
-                          ty2 == ty ]
-
---
 
 terms :: Context -> Universe -> Universe
 terms ctx base ty =
@@ -46,12 +24,14 @@ terms ctx base ty =
      , let sym = if isVar elt then Var else Const
      ]
   ++ [ App f x
-     | ty' <- argTypes ctx ty
+     | ty' <- argTypes
      , x  <- base ty'
      , f  <- terms ctx base (mkFunTy ty' ty)
      ]
+  where argTypes = [ ty1 | (ty1, ty2) <- funTypes (allTypes ctx),
+                           ty2 == ty ]
 
---
+-- Equivalence class refinement.
 
 iterateUntil :: Eq b => Int -> (a -> b) -> (a -> a) -> a -> (Int, a)
 iterateUntil start p f x = extract (head (filter eq (drop start (zip3 xs (tail xs) [0..]))))
@@ -76,12 +56,12 @@ refine start step eval xss = flatten (iterateUntil start lengths refine1 ([], ma
           split xs = map (map next) (groupBy (\a b -> first a == first b)
                                              (sortBy (comparing first) xs))
 
---
+-- Pruning.
 
 varDepths d (App s t) = varDepths d s `merge` varDepths (d-1) t
 varDepths d (Var x)   = [(x,d)]
 varDepths d _         = []
-  
+
 []          `merge` yks = yks
 xks         `merge` []  = xks
 ((x,k):xks) `merge` ((y,n):yns)
@@ -150,31 +130,12 @@ canDerive t u = do
   u' <- flatten (killSymbols u)
   t' =?= u'
 
-instOf :: Term Symbol -> Term Symbol -> Maybe [(Symbol,Term Symbol)]
-x `instOf` y = [x] `instOfL` [y]
-
-instOfL :: [Term Symbol] -> [Term Symbol] -> Maybe [(Symbol,Term Symbol)]
-xs `instOfL` ys = comp [] (zip ys xs)
- where
-  comp sub []                                 = Just sub
-  comp sub ((Var s,t):ps)                     = compSub sub s t ps
-  comp sub ((Const s,t):ps) | t == Const s    = comp sub ps
-                            | otherwise       = Nothing
-  comp sub ((App f x, App g y):ps)            = comp sub ([(f, g), (x, y)] ++ ps)
-  comp _   _                                  = Nothing
-
-  compSub sub v t ps =
-    case [ t' | (v',t') <- sub, v == v' ] of
-      []             -> comp ((v,t):sub) ps
-      t':_ | t == t' -> comp sub ps
-      _              -> Nothing
-
 subst :: [(Symbol, Term a)] -> Term a -> Term a
 subst sub (App s t) = App (subst sub s) (subst sub t)
 subst sub t@(Var s) = head ([ t | (v,t) <- sub, s == v ] ++ [ t ])
 subst sub s         = s
 
---
+-- Example.
 
 bools = [
  var "x" False,
@@ -184,6 +145,8 @@ bools = [
  con "||" (||),
  con "not" not
  ]
+
+-- Main program.
 
 --main :: IO ()
 main =
@@ -241,12 +204,8 @@ test depth ctx seeds start base = do
   printf "Depth %d: " depth
   let cs0 = filter (not . null) [ terms ctx base ty | ty <- allTypes ctx ]
   printf "%d terms, " (length (concat cs0))
-  let evalM x = do
-        evalSym <- promote value
-        case eval evalSym x of
-          Data v -> fmap Inject (evaluate v)
-      eval' x = [ unGen (evalM x) rnd n | (rnd, n) <- seeds ]
-      (n, cs1) = refine start 50 eval' cs0
+  let eval x = [ evalWithSeed seed x | seed <- seeds ]
+      (n, cs1) = refine start 50 eval cs0
       cs = map sort cs1
   printf "%d classes, %d raw equations, %d tests.\n"
          (length cs)
@@ -263,13 +222,3 @@ tests (d+1) ctx vals start = do
   (n, cs) <- test (d+1) ctx vals start base
   (_, cs1) <- tests d ctx vals n
   if cs0 == cs1 then return (n, cs) else tests (d+1) ctx vals n
-
-data UntypedCompare where
-  Inject :: (Typeable a, Ord a) => a -> UntypedCompare
-instance Eq UntypedCompare where
-  x == y = x `compare` y == EQ
-instance Ord UntypedCompare where
-  Inject x `compare` Inject y =
-    case cast x of
-      Just x' -> x' `compare` y
-      Nothing -> error "incomparable"

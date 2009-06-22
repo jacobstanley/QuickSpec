@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs,TypeFamilies,FlexibleInstances,FlexibleContexts,DeriveDataTypeable,EmptyDataDecls,ScopedTypeVariables #-}
+{-# LANGUAGE GADTs,TypeFamilies,FlexibleInstances,FlexibleContexts,DeriveDataTypeable,ScopedTypeVariables #-}
 module Term where
 
 import Data.Ord
@@ -10,28 +10,11 @@ import System.Random
 import Test.QuickCheck hiding (label)
 import Test.QuickCheck.Gen
 
-data Data where
-  Data :: Classify a => a -> Data
+-- Terms.
 
 data Symbol
   = Symbol { name :: String, label :: Int, isVar :: Bool, range :: Gen Data }
   deriving Typeable
-
-value :: Symbol -> Gen Data
-value s = label s `coarbitrary` range s
-
-symbolType :: Symbol -> TypeRep
-symbolType s =
-  case unGen (value s) undefined undefined of
-    Data x -> typeOf x
-
-termType :: Term Symbol -> TypeRep
-termType (Var s) = symbolType s
-termType (Const s) = symbolType s
-termType (App t u) = fromJust (funResultTy (termType t) (termType u))
-
-isCon :: Symbol -> Bool
-isCon = not . isVar
 
 instance Show Symbol where
   show = name
@@ -45,10 +28,19 @@ instance Ord Symbol where
 relabel :: Int -> Symbol -> Symbol
 relabel l e = e { label = l }
 
+isCon :: Symbol -> Bool
+isCon = not . isVar
+
 isOp :: Symbol -> Bool
 isOp s | isCon s && name s == "[]" = False
 isOp s | isCon s = not (all isAlphaNum (name s))
 isOp _ = False
+
+var :: forall a. (Classify a, Arbitrary a) => String -> a -> Symbol
+var name _ = Symbol { name = name, label = undefined, isVar = True, range = fmap Data (arbitrary :: Gen a) }
+
+con :: Classify a => String -> a -> Symbol
+con name impl = Symbol { name = name, label = undefined, isVar = False, range = fmap Data (return impl) }
 
 data Term c = Const c | Var Symbol | App (Term c) (Term c) deriving (Typeable, Eq)
 
@@ -113,6 +105,38 @@ instance Show (Term Symbol) where
 
      show' x = showsPrec 1 x ""
 
+-- Types.
+
+funTypes :: [TypeRep] -> [(TypeRep, TypeRep)]
+funTypes tys =
+  [ (ty1, ty2) | ty <- tys,
+                 (c, [ty1, ty2]) <- [splitTyConApp ty],
+                 tyConString c == "->" ]
+
+symbolType :: Symbol -> TypeRep
+symbolType s =
+  case unGen evalSym undefined undefined s of
+    Data x -> typeOf x
+
+termType :: Term Symbol -> TypeRep
+termType (Var s) = symbolType s
+termType (Const s) = symbolType s
+termType (App t u) = fromJust (funResultTy (termType t) (termType u))
+
+resultTypes :: TypeRep -> [TypeRep]
+resultTypes ty = ty:concat [ resultTypes ty' | (_, ty') <- funTypes [ty] ]
+
+allTypes :: [Symbol] -> [TypeRep]
+allTypes ctx = nub (concatMap (resultTypes . symbolType) ctx)
+
+-- Evaluation.
+
+data Data where
+  Data :: Classify a => a -> Data
+
+evalSym :: Gen (Symbol -> Data)
+evalSym = promote (\s -> label s `coarbitrary` range s)
+
 eval :: (Symbol -> Data) -> Term Symbol -> Data
 eval ctx (Const s) = ctx s
 eval ctx (Var s) = ctx s
@@ -148,8 +172,19 @@ instance Classify a => Classify [a] where
   type Value [a] = [Value a]
   evaluate = mapM evaluate
 
-var :: forall a. (Classify a, Arbitrary a) => String -> a -> Symbol
-var name _ = Symbol { name = name, label = undefined, isVar = True, range = fmap Data (arbitrary :: Gen a) }
+data AnyValue where
+  Value :: (Typeable a, Ord a) => a -> AnyValue
+instance Eq AnyValue where
+  x == y = x `compare` y == EQ
+instance Ord AnyValue where
+  Value x `compare` Value y =
+    case cast x of
+      Just x' -> x' `compare` y
+      Nothing -> error "incomparable"
 
-con :: Classify a => String -> a -> Symbol
-con name impl = Symbol { name = name, label = undefined, isVar = False, range = fmap Data (return impl) }
+evalWithSeed :: (StdGen, Int) -> Term Symbol -> AnyValue
+evalWithSeed (rnd, n) s = unGen testM rnd n
+  where testM = do
+          evalSym' <- evalSym
+          case eval evalSym' s of
+            Data x -> fmap Value (evaluate x)
