@@ -112,4 +112,12 @@ heapCons = [
  con "nil" (Nil :: Heap Int)
  ]
 
-main = laws (baseVars ++ listVars ++ listCons) 3
+natCons = [
+ con "+" ((+) :: Int -> Int -> Int),
+ con "-" ((-) :: Int -> Int -> Int),
+ con "*" ((*) :: Int -> Int -> Int),
+ con "neg" (negate :: Int -> Int),
+ con "0" (0 :: Int),
+ con "1" (1 :: Int) ]
+
+main = laws (baseVars ++ natCons) 3
