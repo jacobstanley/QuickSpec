@@ -1,5 +1,5 @@
-{-# LANGUAGE GADTs #-}
-module Main where
+{-# LANGUAGE GADTs,ScopedTypeVariables #-}
+module Equations where
 
 import Control.Monad.Writer
 import Data.List
@@ -152,23 +152,7 @@ subst sub (App s t) = App (subst sub s) (subst sub t)
 subst sub t@(Var s) = head ([ t | (v,t) <- sub, s == v ] ++ [ t ])
 subst sub s         = s
 
--- Example.
-
-bools = [
- var "x" False,
- var "y" False,
- var "z" False,
- con "&&" (&&),
- con "||" (||),
- con "not" not
- ]
-
 -- Main program.
-
---main :: IO ()
-main =
-  do hSetBuffering stdout NoBuffering
-     laws bools 3
 
 genSeeds :: IO [(StdGen, Int)]
 genSeeds = do
@@ -177,6 +161,7 @@ genSeeds = do
   return (zip (rnds rnd) (concat (repeat [0,2..20])))
 
 laws ctx0 depth = do
+  hSetBuffering stdout NoBuffering
   let ctx = zipWith relabel [0..] (ctx0 ++ undefinedSyms ctx0)
   putStrLn "== API =="
   putStrLn "-- functions"
