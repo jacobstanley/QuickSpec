@@ -16,7 +16,8 @@ boolCons = [
  con "&&" (&&),
  con "||" (||),
  con "not" not,
- con "assert" (\x (y :: Bool) -> if x then y else error "assertion failed") 
+ con "true" True,
+ con "false" False
  ]
 
 baseVars = [
@@ -42,4 +43,4 @@ listCons = [
  con "unit" (\x -> [x] :: [Int]),
  con "insert" (insert :: Int -> [Int] -> [Int])]
 
-main = laws (baseVars ++ listVars ++ listCons) 3
+main = laws (boolVars ++ boolCons) 3
