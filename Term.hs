@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs,TypeFamilies,FlexibleInstances,FlexibleContexts,DeriveDataTypeable,ScopedTypeVariables #-}
 module Term where
 
+import CatchExceptions
 import Data.Ord
 import Data.Char
 import Data.List
@@ -187,4 +188,4 @@ evalWithSeed (rnd, n) s = unGen testM rnd n
   where testM = do
           evalSym' <- evalSym
           case eval evalSym' s of
-            Data x -> fmap Value (evaluate x)
+            Data x -> fmap (Value . catchExceptions) (evaluate x)
