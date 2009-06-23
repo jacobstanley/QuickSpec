@@ -48,6 +48,7 @@ depth (App s t) = depth s `max` (1 + depth t)
 depth _ = 1
 
 size (App s t) = size s + size t
+size (Var _) = 0
 size _ = 1
 
 numVars (Var _) = 1
@@ -82,6 +83,18 @@ instance Ord s => Ord (Term s) where
     
     args (App s t) = [s, t]
     args _         = []
+
+equationOrder (t, u) = (depth (ignoreFree t), size (ignoreFree t), t, u)
+  where occur = length . vars
+        ignoreFree t | isFree t = Const (head t)
+        ignoreFree (App t u) = App (ignoreFree t) (ignoreFree u)
+        ignoreFree t = t
+        isFree (App t (Var s)) = isFree t && s `notElem` vars t
+        isFree (Const s) = True
+        isFree _ = False
+        head (App t u) = head t
+        head (Var t) = t
+        head (Const t) = t
 
 instance Show (Term Symbol) where
   showsPrec _ (Const s)   | isOp s    = showString ("(" ++ show s ++ ")")

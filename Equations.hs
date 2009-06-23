@@ -180,7 +180,7 @@ someLaws ctx0 types depth = do
   (_, cs) <- tests depth ctx seeds 0
   let eqs = map head
           $ group
-          $ sort
+          $ sortBy (comparing equationOrder)
           $ [ (y,x) | (x:xs) <- cs, y <- xs ]
   printf "%d raw equations.\n\n" (length eqs)
 --  let univ = concat [allTerms depth ctx t | t <- allTypes ctx]
