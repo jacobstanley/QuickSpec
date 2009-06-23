@@ -191,8 +191,8 @@ someLaws ctx0 types depth = do
       interesting1 t = any (\t -> termType t `elem` types) (subterms t)
       pruned = filter interesting (prune ctx depth univ eqs)
   sequence_
-       [ putStrLn (show y ++ " = " ++ show x)
-       | (y,x) <- pruned
+       [ putStrLn (show i ++ ": "++ show y ++ " = " ++ show x)
+       | (i, (y,x)) <- zip [1..] pruned
        ]
   forM pruned $ \(y, x) -> do
     let xs `isSubsetOf` ys = sort xs `isSublistOf` sort ys
