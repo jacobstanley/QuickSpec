@@ -160,7 +160,9 @@ genSeeds = do
   let rnds rnd = rnd1 : rnds rnd2 where (rnd1, rnd2) = split rnd
   return (zip (rnds rnd) (concat (repeat [0,2..20])))
 
-laws ctx0 depth = do
+laws ctx0 depth = someLaws ctx0 (allTypes ctx0) depth
+
+someLaws ctx0 types depth = do
   hSetBuffering stdout NoBuffering
   let ctx = zipWith relabel [0..] (ctx0 ++ undefinedSyms ctx0)
   putStrLn "== API =="
@@ -186,7 +188,9 @@ laws ctx0 depth = do
   let univ = map head cs
   printf "Universe has %d terms.\n" (length univ)
   putStrLn "== equations =="
-  let pruned = prune ctx depth univ eqs
+  let interesting (x, y) = interesting1 x || interesting1 y
+      interesting1 t = any (\t -> termType t `elem` types) (subterms t)
+      pruned = filter interesting (prune ctx depth univ eqs)
   sequence_
        [ putStrLn (show y ++ " = " ++ show x)
        | (y,x) <- pruned

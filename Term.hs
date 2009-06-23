@@ -70,6 +70,11 @@ mapVars f (Var v)   = Var (f v)
 mapVars f (Undefined s) = Undefined s
 mapVars f (App t u) = App (mapVars f t) (mapVars f u)
 
+subterms, directSubterms :: Term c -> [Term c]
+subterms t = t:concatMap subterms (directSubterms t)
+directSubterms (App t u) = [t, u]
+directSubterms _ = []
+
 instance Ord s => Ord (Term s) where
   Undefined s1 `compare` Undefined s2 = s1 `compare` s2
   Undefined _ `compare` _ = LT
@@ -166,6 +171,11 @@ class (Typeable a, Ord (Value a), Typeable (Value a)) => Classify a where
   rhs :: a -> Data
   rhs = error "tried to get the rhs of a non-function"
 
+evalMap :: Classify a => ((a -> Value a) -> f a -> f (Value a)) -> f a -> Gen (f (Value a))
+evalMap map x = do
+  evalInside <- promote evaluate
+  return (map evalInside x)
+
 instance (Typeable a, Arbitrary a, Classify b) => Classify (a -> b) where
   type Value (a -> b) = Value b
   evaluate f = do
@@ -187,7 +197,7 @@ instance Classify Int where
 
 instance Classify a => Classify [a] where
   type Value [a] = [Value a]
-  evaluate = mapM evaluate
+  evaluate = evalMap map
 
 data AnyValue where
   Value :: (Typeable a, Ord a) => a -> AnyValue
