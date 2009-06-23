@@ -13,8 +13,9 @@ import Test.QuickCheck.Gen
 
 -- Terms.
 
+data SymbolType = TVar | TConst | TUndefined deriving (Eq, Ord, Show)
 data Symbol
-  = Symbol { name :: String, label :: Int, isVar :: Bool, range :: Gen Data }
+  = Symbol { name :: String, label :: Int, typ :: SymbolType, range :: Gen Data }
   deriving Typeable
 
 instance Show Symbol where
@@ -29,31 +30,33 @@ instance Ord Symbol where
 relabel :: Int -> Symbol -> Symbol
 relabel l e = e { label = l }
 
-isCon :: Symbol -> Bool
-isCon = not . isVar
-
 isOp :: Symbol -> Bool
-isOp s | isCon s && name s == "[]" = False
-isOp s | isCon s = not (all isAlphaNum (name s))
+isOp s | typ s == TConst && name s == "[]" = False
+isOp s | typ s == TConst = not (all isAlphaNum (name s))
 isOp _ = False
 
 var :: forall a. (Classify a, Arbitrary a) => String -> a -> Symbol
-var name _ = Symbol { name = name, label = undefined, isVar = True, range = fmap Data (arbitrary :: Gen a) }
+var name _ = Symbol { name = name, label = undefined, typ = TVar, range = fmap Data (arbitrary :: Gen a) }
 
 con :: Classify a => String -> a -> Symbol
-con name impl = Symbol { name = name, label = undefined, isVar = False, range = fmap Data (return impl) }
+con name impl = Symbol { name = name, label = undefined, typ = TConst, range = fmap Data (return impl) }
 
-data Term c = Const c | Var Symbol | App (Term c) (Term c) deriving (Typeable, Eq)
+data Term c = Const c | Var Symbol | App (Term c) (Term c) | Undefined c deriving (Typeable, Eq)
+
+isUndefined (Undefined _) = True
+isUndefined _ = False
 
 depth, size, numVars :: Term c -> Int
 depth (App s t) = depth s `max` (1 + depth t)
 depth _ = 1
 
 size (App s t) = size s + size t
+size (Undefined _) = 0
 size _ = 1
 
 numVars (Var _) = 1
 numVars (Const _) = 0
+numVars (Undefined _) = 0
 numVars (App s t) = numVars s + numVars t
 
 vars :: Term c -> [Symbol]
@@ -64,9 +67,13 @@ vars _         = []
 mapVars :: (Symbol -> Symbol) -> Term c -> Term c
 mapVars f (Const k) = Const k
 mapVars f (Var v)   = Var (f v)
+mapVars f (Undefined s) = Undefined s
 mapVars f (App t u) = App (mapVars f t) (mapVars f u)
 
 instance Ord s => Ord (Term s) where
+  Undefined s1 `compare` Undefined s2 = s1 `compare` s2
+  Undefined _ `compare` _ = LT
+  _ `compare` Undefined _ = GT
   s `compare` t = stamp s `compare` stamp t
    where
     stamp t = (depth t, size t, -occur t, top t, args t)
@@ -84,6 +91,7 @@ instance Show (Term Symbol) where
   showsPrec _ (Const s)   | isOp s    = showString ("(" ++ show s ++ ")")
                           | otherwise = shows s
   showsPrec _ (Var s)   = shows s
+  showsPrec _ (Undefined _) = showString "undefined"
   showsPrec p (App f x) = showString (showApp p f [x])
    where
      paren 0 s = s
@@ -114,15 +122,19 @@ funTypes tys =
                  (c, [ty1, ty2]) <- [splitTyConApp ty],
                  tyConString c == "->" ]
 
+symbolClass :: Symbol -> Data
+symbolClass s = unGen evalSym undefined undefined s
+
 symbolType :: Symbol -> TypeRep
 symbolType s =
-  case unGen evalSym undefined undefined s of
+  case symbolClass s of
     Data x -> typeOf x
 
 termType :: Term Symbol -> TypeRep
 termType (Var s) = symbolType s
 termType (Const s) = symbolType s
 termType (App t u) = fromJust (funResultTy (termType t) (termType u))
+termType (Undefined s) = symbolType s
 
 resultTypes :: TypeRep -> [TypeRep]
 resultTypes ty = ty:concat [ resultTypes ty' | (_, ty') <- funTypes [ty] ]
@@ -141,6 +153,7 @@ evalSym = promote (\s -> label s `coarbitrary` range s)
 eval :: (Symbol -> Data) -> Term Symbol -> Data
 eval ctx (Const s) = ctx s
 eval ctx (Var s) = ctx s
+eval ctx (Undefined s) = ctx s
 eval ctx (App t u) =
   case (eval ctx t, eval ctx u) of
     (Data v, Data w) -> apply v w
@@ -150,6 +163,8 @@ class (Typeable a, Ord (Value a), Typeable (Value a)) => Classify a where
   evaluate :: a -> Gen (Value a)
   apply :: Typeable b => a -> b -> Data
   apply = error "ill-typed term formed"
+  rhs :: a -> Data
+  rhs = error "tried to get the rhs of a non-function"
 
 instance (Typeable a, Arbitrary a, Classify b) => Classify (a -> b) where
   type Value (a -> b) = Value b
@@ -160,6 +175,7 @@ instance (Typeable a, Arbitrary a, Classify b) => Classify (a -> b) where
     case cast x of
       Just x' -> Data (f x')
       Nothing -> error "ill-typed term formed"
+  rhs f = Data (f undefined)
 
 instance Classify Bool where
   type Value Bool = Bool

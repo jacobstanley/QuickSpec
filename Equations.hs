@@ -21,15 +21,30 @@ terms ctx base ty =
      [ sym elt
      | elt <- ctx
      , symbolType elt == ty
-     , let sym = if isVar elt then Var else Const
+     , let sym = case typ elt of
+                   TVar -> Var
+                   TConst -> Const
+                   TUndefined -> Undefined
      ]
   ++ [ App f x
      | ty' <- argTypes
      , x  <- base ty'
+     , not (isUndefined x)
      , f  <- terms ctx base (mkFunTy ty' ty)
+     , not (isUndefined f)
      ]
   where argTypes = [ ty1 | (ty1, ty2) <- funTypes (allTypes ctx),
                            ty2 == ty ]
+
+undefinedSyms :: Context -> Context
+undefinedSyms = typeNub . concatMap (makeUndefined . symbolClass) . typeNub
+  where typeNub = nubBy (\s1 s2 -> symbolType s1 == symbolType s2)
+        makeUndefined (Data x) =
+          Symbol { name = "undefined", label = undefined, typ = TUndefined,
+                   range = return (Data (undefined `asTypeOf` x)) }:
+          case funTypes [typeOf x] of
+            [] -> []
+            _ -> makeUndefined (rhs x)
 
 -- Equivalence class refinement.
 
@@ -82,6 +97,7 @@ consequences d univ (t, u) = mapM_ unify (cons1 t u `mplus` cons1 u t)
 
 flatten (Var s) = return (label s)
 flatten (Const s) = return s
+flatten (Undefined s) = return s
 flatten (App t u) = do
   t' <- flatten t
   u' <- flatten u
@@ -89,6 +105,7 @@ flatten (App t u) = do
 
 killSymbols (Var s) = Var s
 killSymbols (Const s) = Const (label s)
+killSymbols (Undefined s) = Undefined (label s)
 killSymbols (App t u) = App (killSymbols t) (killSymbols u)
 
 prune1 :: Int -> [(Int, Int, TypeRep)] -> [(Term Symbol, Term Symbol)] -> CC () [(Term Symbol, Term Symbol)]
@@ -160,17 +177,17 @@ genSeeds = do
   return (zip (rnds rnd) (concat (repeat [0,2..20])))
 
 laws ctx0 depth = do
-  let ctx = zipWith relabel [0..] ctx0
+  let ctx = zipWith relabel [0..] (ctx0 ++ undefinedSyms ctx0)
   putStrLn "== API =="
   putStrLn "-- functions"
   sequence_ [ putStrLn (show (Const elt) ++ " :: " ++ show (symbolType elt))
             | elt <- ctx
-            , isCon elt
+            , typ elt == TConst
             ]
   putStrLn "-- variables"
   sequence_ [ putStrLn (name elt ++ " :: " ++ show (symbolType elt))
             | elt <- ctx
-            , isVar elt
+            , typ elt == TVar
             ]
   seeds <- genSeeds
   putStrLn "== classes =="
