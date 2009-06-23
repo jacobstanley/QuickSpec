@@ -74,9 +74,13 @@ refine start step eval xss = flatten (iterateUntil start lengths refine1 ([], ma
 
 -- Pruning.
 
-varDepths d (App s t) = varDepths d s `merge` varDepths (d-1) t
-varDepths d (Var x)   = [(x,d)]
-varDepths d _         = []
+-- Unary functions don't increase depth for substitution generation.
+varDepths d (App (Const s) t) = varDepths d t
+varDepths d t = varDepths1 d t
+
+varDepths1 d (App s t) = varDepths1 d s `merge` varDepths (d-1) t
+varDepths1 d (Var x)   = [(x,d)]
+varDepths1 d _         = []
 
 []          `merge` yks = yks
 xks         `merge` []  = xks
@@ -92,7 +96,7 @@ consequences d univ (t, u) = mapM_ unify (cons1 t u `mplus` cons1 u t)
             y' <- flatten y
             x' =:= y'
           cons1 t u = do
-            s <- mapM substs (varDepths d t)
+            s <- mapM substs [ (v, d' `min` (d-1)) | (v, d') <- varDepths d t ]
             return (subst s t, subst s u)
           substs (v, d) = [ (v, Const s) | (_, s, ty) <- takeWhile (\(d', _, _) -> d' <= d) univ, ty == symbolType v ]
 
