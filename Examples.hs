@@ -43,6 +43,7 @@ listCons = [
  con "tail" (tail :: [Int] -> [Int]),
  con ":" ((:) :: Int -> [Int] -> [Int]),
  con "[]" ([] :: [Int]),
+ con "unit" (\x -> [x] :: [Int]),
  con "insertL" (Data.List.insert :: Int -> [Int] -> [Int])]
 
 -- Leftist heaps.
@@ -111,5 +112,4 @@ heapCons = [
  con "nil" (Nil :: Heap Int)
  ]
 
-main = someLaws (boolVars ++ boolCons ++ listVars ++ listCons ++ heapVars ++ heapCons)
-                [typeOf (undefined :: Heap Int)] 3
+main = laws (baseVars ++ listVars ++ listCons) 3
