@@ -84,7 +84,7 @@ instance Ord s => Ord (Term s) where
     args (App s t) = [s, t]
     args _         = []
 
-equationOrder (t, u) = (depth (ignoreFree t), size (ignoreFree t), t, u)
+equationOrder (t, u) = (depth (ignoreFree t), size (ignoreFree t), depth t, size t, -(unsaturation (termType t)), t, u)
   where occur = length . vars
         ignoreFree t | isFree t = Const (head t)
         ignoreFree (App t u) = App (ignoreFree t) (ignoreFree u)
@@ -95,6 +95,10 @@ equationOrder (t, u) = (depth (ignoreFree t), size (ignoreFree t), t, u)
         head (App t u) = head t
         head (Var t) = t
         head (Const t) = t
+        unsaturation ty =
+          case funTypes [ty] of
+            [] -> 0
+            [(_, ty')] -> 1 + unsaturation ty'
 
 instance Show (Term Symbol) where
   showsPrec _ (Const s)   | isOp s    = showString ("(" ++ show s ++ ")")
