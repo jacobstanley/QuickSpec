@@ -199,14 +199,12 @@ someLaws ctx0 types depth = do
        | (i, (y,x)) <- zip [1..] pruned
        ]
   forM pruned $ \(y, x) -> do
-    let xs `isSubsetOf` ys = sort xs `isSublistOf` sort ys
-        [] `isSublistOf` _ = True
-        (x:xs) `isSublistOf` [] = False
-        (x:xs) `isSublistOf` (y:ys) | x == y = xs `isSublistOf` ys
-                                    | otherwise = (x:xs) `isSublistOf` ys
-    when (not (vars y `isSubsetOf` vars x || vars x `isSubsetOf` vars y)) $
+    let c = head (filter (\(x':_) -> x == x') cs)
+        commonVars = foldr1 intersect (map vars c)
+        subsumes t = sort (vars t) == sort commonVars
+    when (not (any subsumes c)) $
          printf "*** missing term with value %s\n"
-                (show (mapVars (\s -> if s `elem` vars y then s else s { name = "_" ++ name s }) x))
+                (show (mapVars (\s -> if s `elem` commonVars then s else s { name = "_" ++ name s }) x))
 
 test :: Int -> Context -> [(StdGen, Int)] -> Int -> (TypeRep -> [Term Symbol]) -> IO (Int, [[Term Symbol]])
 test depth ctx seeds start base = do
