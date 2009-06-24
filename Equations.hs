@@ -185,7 +185,7 @@ someLaws ctx0 types depth = do
   let eqs = map head
           $ group
           $ sortBy (comparing equationOrder)
-          $ [ (y,x) | (x:xs) <- cs, y <- xs ]
+          $ [ (y,x) | (x:xs) <- cs, funTypes [termType x] == [], y <- xs ]
   printf "%d raw equations.\n\n" (length eqs)
 --  let univ = concat [allTerms depth ctx t | t <- allTypes ctx]
   let univ = map head cs
