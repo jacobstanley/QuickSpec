@@ -26,16 +26,27 @@ terms ctx base ty =
                    TConst -> Const
      ]
   ++ [ App f x
-     | ty' <- argTypes
+     | ty' <- argTypes ctx ty
      , x  <- base ty'
      , not (termIsUndefined x)
      , f  <- terms ctx base (mkFunTy ty' ty)
      , not (termIsUndefined f)
      ]
-  where argTypes = [ ty1 | (ty1, ty2) <- funTypes (allTypes ctx),
-                           ty2 == ty ]
-        termIsUndefined (Const s) = isUndefined s
-        termIsUndefined _ = False
+
+argTypes ctx ty = [ ty1 | (ty1, ty2) <- funTypes (allTypes ctx),
+                          ty2 == ty ]
+termIsUndefined (Const s) = isUndefined s
+termIsUndefined _ = False
+
+terms' :: Context -> Universe -> Universe
+terms' ctx base ty = nubSort
+     (terms ctx base ty ++
+       [ App (Const f) x
+       | ty' <- argTypes ctx ty
+       , f <- ctx
+       , symbolType f == mkFunTy ty' ty
+       , x <- terms ctx base ty' ])
+  where nubSort = map head . group . sort
 
 undefinedSyms :: Context -> Context
 undefinedSyms = typeNub . concatMap (makeUndefined . symbolClass) . typeNub
@@ -74,8 +85,9 @@ refine start step eval xss = flatten (iterateUntil start lengths refine1 ([], ma
 
 -- Pruning.
 
--- Unary functions don't increase depth for substitution generation.
-varDepths d (App (Const s) t) = varDepths d t
+-- A single unary function doesn't increase depth, but two in a row
+-- do.
+varDepths d (App (Const s) t) = varDepths1 d t
 varDepths d t = varDepths1 d t
 
 varDepths1 d (App s t) = varDepths1 d s `merge` varDepths (d-1) t
@@ -188,14 +200,14 @@ someLaws ctx0 types depth = do
           $ [ (y,x) | (x:xs) <- cs, funTypes [termType x] == [], y <- xs ]
   printf "%d raw equations.\n\n" (length eqs)
 --  let univ = concat [allTerms depth ctx t | t <- allTypes ctx]
-  let univ = map head cs
+  let univ = concat cs
   printf "Universe has %d terms.\n" (length univ)
   putStrLn "== equations =="
   let interesting (x, y) = interesting1 x || interesting1 y
       interesting1 t = any (\t -> termType t `elem` types) (subterms t)
       pruned = filter interesting (prune ctx depth univ eqs)
   sequence_
-       [ putStrLn (show i ++ ": "++ show y ++ " = " ++ show x)
+       [ putStrLn (show i ++ ": "++ show y ++ " == " ++ show x)
        | (i, (y,x)) <- zip [1..] pruned
        ]
   forM pruned $ \(y, x) -> do
