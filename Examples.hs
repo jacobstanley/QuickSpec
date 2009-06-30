@@ -4,7 +4,7 @@ module Main where
 
 import Equations hiding (merge)
 import Term
-import qualified Data.List(insert)
+import qualified Data.List
 import Data.Ord
 import Data.Typeable
 import Test.QuickCheck
@@ -39,12 +39,22 @@ listVars = [
 
 listCons = [
  con "++" ((++) :: [Int] -> [Int] -> [Int]),
- con "reverse" (reverse :: [Int] -> [Int]),
+-- con "reverse" (reverse :: [Int] -> [Int]),
+ con "head" (head :: [Int] -> Int),
  con "tail" (tail :: [Int] -> [Int]),
  con ":" ((:) :: Int -> [Int] -> [Int]),
  con "[]" ([] :: [Int]),
- con "unit" (\x -> [x] :: [Int]),
- con "insertL" (Data.List.insert :: Int -> [Int] -> [Int])]
+ con "sort" (Data.List.sort :: [Int] -> [Int]),
+ con "mergeL" mergeL,
+-- con "unit" (\x -> [x] :: [Int]),
+ con "insertL" (Data.List.insert :: Int -> [Int] -> [Int]),
+ con "null" (null :: [Int] -> Bool)]
+
+mergeL :: [Int] -> [Int] -> [Int]
+mergeL [] xs = xs
+mergeL xs [] = xs
+mergeL (x:xs) (y:ys) | x < y = x:mergeL xs (y:ys)
+                    | otherwise = y:mergeL (x:xs) ys
 
 -- Leftist heaps.
 data Heap a = Nil | Branch Int a (Heap a) (Heap a) deriving Typeable
@@ -65,6 +75,10 @@ instance (Classify a, Ord a) => Classify (Heap a) where
 toList :: Ord a => Heap a -> [a]
 toList h | empty h = []
          | otherwise = top h:toList (delete h)
+
+toList' :: Heap a -> [a]
+toList' Nil = []
+toList' (Branch _ x l r) = x:(toList' l ++ toList' r)
 
 fromList :: Ord a => [a] -> Heap a
 fromList = foldr insert Nil
@@ -93,23 +107,30 @@ merge h1@(Branch _ x1 l1 r1) h2@(Branch _ x2 l2 r2)
  | x1 <= x2 = branch x1 (merge l1 h2) r1
  | otherwise = merge h2 h1
 
+leftBranch (Branch _ _ l _) = l
+rightBranch (Branch _ _ _ r) = r
+
 npl :: Heap a -> Int
 npl Nil = 0
 npl (Branch n _ _ _) = n
 
 heapVars = [
- var "H" (Nil :: Heap Int),
- var "H'" (Nil :: Heap Int) ]
+ var "h" (Nil :: Heap Int),
+ var "h1" (Nil :: Heap Int),
+ var "h2" (Nil :: Heap Int)
+ ]
 
 heapCons = [
- con "toList" (\h -> toList h :: [Int]),
- con "fromList" (\xs -> fromList xs :: Heap Int),
- con "empty" (\h -> empty (h :: Heap Int)),
- con "top" (\h -> top h :: Int),
- con "insertH" (\x h -> insert x h :: Heap Int),
- con "delete" (\h -> delete h :: Heap Int),
- con "merge" (\h1 h2 -> merge h1 h2 :: Heap Int),
- con "nil" (Nil :: Heap Int)
+-- con "toList" (\h -> toList h :: [Int]),
+-- con "fromList" (\xs -> fromList xs :: Heap Int),
+ con "isEmpty" (\h -> empty (h :: Heap Int)),
+ con "findMin" (\h -> top h :: Int),
+ con "insert" (\x h -> insert x h :: Heap Int),
+ con "deleteMin" (\h -> delete h :: Heap Int),
+-- con "merge" (\h1 h2 -> merge h1 h2 :: Heap Int),
+ con "empty" (Nil :: Heap Int)
+-- con "leftBranch" (leftBranch :: Heap Int -> Heap Int),
+-- con "rightBranch" (rightBranch :: Heap Int -> Heap Int)
  ]
 
 natCons = [
@@ -120,4 +141,4 @@ natCons = [
  con "0" (0 :: Int),
  con "1" (1 :: Int) ]
 
-main = laws (baseVars ++ natCons) 3
+main = someLaws (baseVars ++ boolVars ++ heapVars ++ heapCons) [typeOf (undefined :: Heap Int)] 3
