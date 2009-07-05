@@ -2,6 +2,7 @@
 module Term where
 
 import CatchExceptions
+import Control.Monad
 import Data.Ord
 import Data.Char
 import Data.List
@@ -209,6 +210,10 @@ instance Classify Int where
 instance Classify a => Classify [a] where
   type Value [a] = [Value a]
   evaluate = evalMap map
+
+instance (Classify a, Classify b) => Classify (a, b) where
+  type Value (a, b) = (Value a, Value b)
+  evaluate (x, y) = liftM2 (,) (evaluate x) (evaluate y)
 
 data AnyValue where
   Value :: (Typeable a, Ord a) => a -> AnyValue
