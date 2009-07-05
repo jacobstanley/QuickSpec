@@ -177,6 +177,27 @@ genSeeds = do
 
 laws ctx0 depth = someLaws ctx0 (allTypes ctx0) depth
 
+-- A definition is something of the form
+--   f x1..xn = u
+-- where all the xi are distinct variables, there is at least one
+-- parameter to f, and if there is an application of f inside u,
+-- then one of the xi mustn't appear in that application.
+isDefinition (u, t) = typ (fun t) == TConst && all isVar (args t) && not (null (args t)) && nub (args t) == args t && acyclic u
+  where isVar (Var _) = True
+        isVar _ = False
+        isCon (Const _) = True
+        isCon _ = False
+        acyclic u = all acyclic (args u) && acyclicTop u
+        acyclicTop u
+          | fun t == fun u = nub (map Var (vars u)) `isProperSubsetOf` args t
+          | otherwise = True
+        xs `isProperSubsetOf` ys = sort xs `isSublistOf` sort ys && sort xs /= sort ys
+        [] `isSublistOf` _ = True
+        (x:xs) `isSublistOf` (y:ys) | x == y = xs `isSublistOf` ys
+                                    | otherwise = (x:xs) `isSublistOf` ys
+
+definitions es = nubBy (\(_, t) (_, t') -> fun t == fun t') (filter isDefinition es)
+
 someLaws ctx0 types depth = do
   hSetBuffering stdout NoBuffering
   let ctx = zipWith relabel [0..] (ctx0 ++ undefinedSyms ctx0)
@@ -202,6 +223,11 @@ someLaws ctx0 types depth = do
 --  let univ = concat [allTerms depth ctx t | t <- allTypes ctx]
   let univ = concat cs
   printf "Universe has %d terms.\n" (length univ)
+  putStrLn "== definitions =="
+  sequence_
+       [ putStrLn (show i ++ ": "++ show x ++ " := " ++ show y)
+       | (i, (y,x)) <- zip [1..] (definitions eqs)
+       ]
   putStrLn "== equations =="
   let interesting (x, y) = interesting1 x || interesting1 y
       interesting1 t = any (\t -> termType t `elem` types) (subterms t)

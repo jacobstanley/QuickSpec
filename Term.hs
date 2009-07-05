@@ -86,15 +86,12 @@ instance Ord s => Ord (Term s) where
 
 equationOrder (t, u) = (depth (ignoreFree t), size (ignoreFree t), depth t, size t, -(unsaturation (termType t)), t, u)
   where occur = length . vars
-        ignoreFree t | isFree t = Const (head t)
+        ignoreFree t | isFree t = Const (fun t)
         ignoreFree (App t u) = App (ignoreFree t) (ignoreFree u)
         ignoreFree t = t
         isFree (App t (Var s)) = isFree t && s `notElem` vars t
         isFree (Const s) = True
         isFree _ = False
-        head (App t u) = head t
-        head (Var t) = t
-        head (Const t) = t
         unsaturation ty =
           case funTypes [ty] of
             [] -> 0
@@ -125,6 +122,15 @@ instance Show (Term Symbol) where
        paren p (concat (intersperse " " (map show' (f:xs))))
 
      show' x = showsPrec 1 x ""
+
+fun :: Term Symbol -> Symbol
+fun (App t u) = fun t
+fun (Var x) = x
+fun (Const x) = x
+
+args :: Term a -> [Term a]
+args (App t u) = args t ++ [u]
+args x = []
 
 -- Types.
 
