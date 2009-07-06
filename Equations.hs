@@ -193,6 +193,7 @@ isDefinition (u, t) = typ (fun t) == TConst && all isVar (args t) && not (null (
           | otherwise = True
         xs `isProperSubsetOf` ys = sort xs `isSublistOf` sort ys && sort xs /= sort ys
         [] `isSublistOf` _ = True
+        (x:xs) `isSublistOf` [] = False
         (x:xs) `isSublistOf` (y:ys) | x == y = xs `isSublistOf` ys
                                     | otherwise = (x:xs) `isSublistOf` ys
 
