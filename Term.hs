@@ -99,30 +99,30 @@ equationOrder (t, u) = (depth (ignoreFree t), size (ignoreFree t), depth t, size
             [(_, ty')] -> 1 + unsaturation ty'
 
 instance Show (Term Symbol) where
-  showsPrec _ (Const s)   | isOp s    = showString ("(" ++ show s ++ ")")
-                          | otherwise = shows s
-  showsPrec _ (Var s)   = shows s
-  showsPrec p (App f x) = showString (showApp p f [x])
+  showsPrec p t = showString (showApp p (fun t) (args t))
    where
-     paren 0 s = s
-     paren _ s = "(" ++ s ++ ")"
-   
-     showApp p (App f x) xs =
-       showApp p f (x:xs)
-     
-     showApp p (Const op) [x] | isOp op =
-       paren 9 (show' x ++ show op)
+     brack s = "(" ++ s ++ ")"
+     parenFun p s | p < 2 = s
+                  | otherwise = brack s
+     parenOp p s | p < 1 = s
+                 | otherwise = brack s
 
-     showApp p (Const op) [x,y] | isOp op =
-       paren p (show' x ++ show op ++ show' y)
+     showApp p op [] | isOp op = brack (show op)
+                     | otherwise = show op
 
-     showApp p (Const op) (x:y:xs) | isOp op =
-       paren p (concat (intersperse " " (paren 9 (show' x ++ show op ++ show' y):map show' xs)))
+     showApp p op [x] | isOp op =
+       brack (show' 1 x ++ show op)
+
+     showApp p op [x,y] | isOp op =
+       parenOp p (show' 1 x ++ show op ++ show' 1 y)
+
+     showApp p op (x:y:xs) | isOp op =
+       parenFun p (concat (intersperse " " (brack (show' 1 x ++ show op ++ show' 1 y):map (show' 2) xs)))
 
      showApp p f xs =
-       paren p (concat (intersperse " " (map show' (f:xs))))
+       parenFun p (concat (intersperse " " (map (show' 2) (Const f:xs))))
 
-     show' x = showsPrec 1 x ""
+     show' p x = showsPrec p x ""
 
 fun :: Term Symbol -> Symbol
 fun (App t u) = fun t
