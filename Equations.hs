@@ -242,7 +242,7 @@ someLaws ctx0 types depth = do
         commonVars = foldr1 intersect (map vars c)
         subsumes t = sort (vars t) == sort commonVars
     when (not (any subsumes c)) $
-         printf "*** missing term with value %s\n"
+         printf "*** missing term: %s = ???\n"
                 (show (mapVars (\s -> if s `elem` commonVars then s else s { name = "_" ++ name s }) x))
 
 test :: Int -> Context -> [(StdGen, Int)] -> Int -> (TypeRep -> [Term Symbol]) -> IO (Int, [[Term Symbol]])
