@@ -226,8 +226,8 @@ instance Ord AnyValue where
       Nothing -> error "incomparable"
 
 evalWithSeed :: (StdGen, Int) -> Term Symbol -> AnyValue
-evalWithSeed (rnd, n) s = unGen testM rnd n
-  where testM = do
-          evalSym' <- evalSym
-          case eval evalSym' s of
-            Data x -> fmap (Value . catchExceptions) (evaluate x)
+evalWithSeed (g, n) s =
+  case eval evalSym' s of
+    Data x -> Value (catchExceptions (unGen (evaluate x) g2 n))
+  where evalSym' = unGen evalSym g1 n
+        (g1, g2) = split g
