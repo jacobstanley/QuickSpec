@@ -237,7 +237,7 @@ someLaws ctx0 types depth = do
        [ putStrLn (show i ++ ": "++ show y ++ " == " ++ show x)
        | (i, (y,x)) <- zip [1..] pruned
        ]
-  forM pruned $ \(y, x) -> do
+  forM_ pruned $ \(y, x) -> do
     let c = head (filter (\(x':_) -> x == x') cs)
         commonVars = foldr1 intersect (map vars c)
         subsumes t = sort (vars t) == sort commonVars
