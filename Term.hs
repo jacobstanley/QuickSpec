@@ -225,9 +225,8 @@ instance Ord AnyValue where
       Just x' -> x' `compare` y
       Nothing -> error "incomparable"
 
-evalWithSeed :: (StdGen, Int) -> Term Symbol -> AnyValue
-evalWithSeed (g, n) s =
-  case eval evalSym' s of
-    Data x -> Value (catchExceptions (unGen (evaluate x) g2 n))
-  where evalSym' = unGen evalSym g1 n
+useSeed :: (StdGen, Int) -> (Symbol -> Data, Data -> AnyValue)
+useSeed (g, n) = (unGen evalSym g1 n, f)
+  where f d = case d of
+                Data x -> Value (catchExceptions (unGen (evaluate x) g2 n))
         (g1, g2) = split g

@@ -2,6 +2,7 @@
 module Equations where
 
 import Control.Monad.Writer
+import Data.Array hiding (range)
 import Data.List
 import Data.Ord
 import Data.Typeable
@@ -250,14 +251,20 @@ test depth ctx seeds start base = do
   printf "Depth %d: " depth
   let cs0 = filter (not . null) [ terms ctx base ty | ty <- allTypes ctx ]
   printf "%d terms, " (length (concat cs0))
-  let eval x = [ evalWithSeed seed x | seed <- seeds ]
-      (n, cs1) = refine start 50 eval cs0
+  let funs = [ (memoSym ctx ctxFun, toValue)
+             | (ctxFun, toValue) <- map useSeed seeds ]
+      evals x = [ toValue (eval ctxFun x) | (ctxFun, toValue) <- funs ]
+      (n, cs1) = refine start 50 evals cs0
       cs = map sort cs1
   printf "%d classes, %d raw equations, %d tests.\n"
          (length cs)
          (sum (map (subtract 1 . length) cs))
          (n*50)
   return (n, cs)
+
+memoSym :: Context -> (Symbol -> a) -> (Symbol -> a)
+memoSym ctx f = (arr !) . label
+  where arr = listArray (0, length ctx - 1) (map f ctx)
 
 tests :: Int -> Context -> [(StdGen, Int)] -> Int -> IO (Int, [[Term Symbol]])
 tests 0 _ _ _ = return (0, [])
