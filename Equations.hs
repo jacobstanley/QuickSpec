@@ -49,7 +49,7 @@ terms' ctx base ty = nubSort
        , f <- ctx
        , symbolType f == mkFunTy ty' ty
        , x <- terms ctx base ty' ])
-  where nubSort = map head . partitionBy compare
+  where nubSort = map head . partitionBy id
 
 undefinedSyms :: Context -> Context
 undefinedSyms = typeNub . concatMap (makeUndefined . symbolClass) . typeNub
@@ -76,13 +76,13 @@ refine start step trivial eval xss = flatten (iterateUntil start length (refine1
           refine1 step = parRefine (refine1 (step-1) . split)
           first (x, (v:vs)) = v
           next (x, (v:vs)) = (x, vs)
-          split = map (map next) . filter (not . trivial . map fst) . partitionBy (comparing first)
+          split = map (map next) . filter (not . trivial . map fst) . partitionBy first
 
 parRefine :: ([a] -> [[a]]) -> ([[a]] -> [[a]])
 parRefine f = parFlatMap (parList (parList r0)) f
 
-partitionBy :: (a -> a -> Ordering) -> [a] -> [[a]]
-partitionBy compare = groupBy (\x y -> x `compare` y == EQ) . sortBy compare
+partitionBy :: Ord b => (a -> b) -> [a] -> [[a]]
+partitionBy value = groupBy (\x y -> value x == value y) . sortBy (comparing value)
 
 -- Pruning.
 
