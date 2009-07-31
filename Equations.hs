@@ -1,7 +1,9 @@
 {-# LANGUAGE GADTs,ScopedTypeVariables #-}
 module Equations where
 
+import Control.Arrow
 import Control.Monad.Writer
+import Control.Parallel.Strategies
 import Data.Array hiding (range)
 import Data.List
 import Data.Ord
@@ -47,7 +49,7 @@ terms' ctx base ty = nubSort
        , f <- ctx
        , symbolType f == mkFunTy ty' ty
        , x <- terms ctx base ty' ])
-  where nubSort = map head . group . sort
+  where nubSort = map head . partitionBy compare
 
 undefinedSyms :: Context -> Context
 undefinedSyms = typeNub . concatMap (makeUndefined . symbolClass) . typeNub
@@ -67,22 +69,20 @@ iterateUntil start p f x = extract (head (filter eq (drop start (zip3 xs (tail x
           eq (a, b, _) = p a == p b
           extract (x, _, n) = (n, x)
 
-refine :: Ord b => Int -> Int -> (a -> [b]) -> [[a]] -> (Int, [[a]])
-refine start step eval xss = flatten (iterateUntil start lengths refine1 ([], map (map (\x -> (x, eval x))) xss))
-    where flatten (n, (triv, nontriv)) = (n, map (map fst) (triv ++ nontriv))
-          refine1 (triv, nontriv) =
-              let
-                (triv', nontriv') = partition trivial (concatMap split nontriv)
-              in
-                (triv ++ triv', nontriv')
-          lengths (xs, ys) = length xs + length ys
-          first (x, vs) = take step vs
-          next (x, vs) = (x, drop step vs)
-          trivial [] = True
-          trivial [_] = True
-          trivial _ = False
-          split xs = map (map next) (groupBy (\a b -> first a == first b)
-                                             (sortBy (comparing first) xs))
+refine :: Ord b => Int -> Int -> ([a] -> Bool) -> (a -> [b]) -> [[a]] -> (Int, [[a]])
+refine start step trivial eval xss = flatten (iterateUntil start length (refine1 step) (map (map (\x -> (x, eval x))) xss))
+    where flatten (n, xss) = (n, map (map fst) xss)
+          refine1 0 = id
+          refine1 step = parRefine (refine1 (step-1) . split)
+          first (x, (v:vs)) = v
+          next (x, (v:vs)) = (x, vs)
+          split = map (map next) . filter (not . trivial . map fst) . partitionBy (comparing first)
+
+parRefine :: ([a] -> [[a]]) -> ([[a]] -> [[a]])
+parRefine f = parFlatMap (parList (parList r0)) f
+
+partitionBy :: (a -> a -> Ordering) -> [a] -> [[a]]
+partitionBy compare = groupBy (\x y -> x `compare` y == EQ) . sortBy compare
 
 -- Pruning.
 
@@ -216,10 +216,9 @@ someLaws ctx0 types depth = do
             ]
   seeds <- genSeeds
   putStrLn "== classes =="
-  (_, cs) <- tests depth ctx seeds 0
+  (_, cs) <- tests depth ctx (\c -> drop 1 c == []) seeds 0
   let eqs = map head
-          $ group
-          $ sortBy (comparing equationOrder)
+          $ partitionBy (comparing equationOrder)
           $ [ (y,x) | (x:xs) <- cs, funTypes [termType x] == [], y <- xs ]
   printf "%d raw equations.\n\n" (length eqs)
 --  let univ = concat [allTerms depth ctx t | t <- allTypes ctx]
@@ -246,15 +245,14 @@ someLaws ctx0 types depth = do
          printf "*** missing term: %s = ???\n"
                 (show (mapVars (\s -> if s `elem` commonVars then s else s { name = "_" ++ name s }) x))
 
-test :: Int -> Context -> [(StdGen, Int)] -> Int -> (TypeRep -> [Term Symbol]) -> IO (Int, [[Term Symbol]])
-test depth ctx seeds start base = do
+test :: Int -> Context -> ([Term Symbol] -> Bool) -> [(StdGen, Int)] -> Int -> (TypeRep -> [Term Symbol]) -> IO (Int, [[Term Symbol]])
+test depth ctx trivial seeds start base = do
   printf "Depth %d: " depth
   let cs0 = filter (not . null) [ terms ctx base ty | ty <- allTypes ctx ]
   printf "%d terms, " (length (concat cs0))
-  let funs = [ (memoSym ctx ctxFun, toValue)
-             | (ctxFun, toValue) <- map useSeed seeds ]
+  let funs = map ((memoSym ctx *** id) . useSeed) seeds
       evals x = [ toValue (eval ctxFun x) | (ctxFun, toValue) <- funs ]
-      (n, cs1) = refine start 50 evals cs0
+      (n, cs1) = refine start 50 trivial evals cs0
       cs = map sort cs1
   printf "%d classes, %d raw equations, %d tests.\n"
          (length cs)
@@ -266,12 +264,12 @@ memoSym :: Context -> (Symbol -> a) -> (Symbol -> a)
 memoSym ctx f = (arr !) . label
   where arr = listArray (0, length ctx - 1) (map f ctx)
 
-tests :: Int -> Context -> [(StdGen, Int)] -> Int -> IO (Int, [[Term Symbol]])
-tests 0 _ _ _ = return (0, [])
-tests (d+1) ctx vals start = do
-  (n0, cs0) <- tests d ctx vals start
+tests :: Int -> Context -> ([Term Symbol] -> Bool) -> [(StdGen, Int)] -> Int -> IO (Int, [[Term Symbol]])
+tests 0 _ _ _ _ = return (0, [])
+tests (d+1) ctx trivial vals start = do
+  (n0, cs0) <- tests d ctx (const False) vals start
   let reps = map head cs0
       base ty = [ t | t <- reps, termType t == ty ]
-  (n, cs) <- test (d+1) ctx vals start base
-  (_, cs1) <- tests d ctx vals n
-  if cs0 == cs1 then return (n, cs) else tests (d+1) ctx vals n
+  (n, cs) <- test (d+1) ctx trivial vals start base
+  (_, cs1) <- tests d ctx (const False) vals n
+  if cs0 == cs1 then return (n, cs) else tests (d+1) ctx trivial vals n
