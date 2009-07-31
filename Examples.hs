@@ -69,8 +69,8 @@ instance (Ord a, Arbitrary a) => Arbitrary (Heap a) where
   arbitrary = fmap fromList arbitrary
 
 instance (Classify a, Ord a) => Classify (Heap a) where
-  type Value (Heap a) = Heap (Value a)
-  evaluate = evalMap (\f -> fromList . map f . toList)
+  type Value (Heap a) = [Value a]
+  evaluate = evaluate . toList
 
 toList :: Ord a => Heap a -> [a]
 toList h | empty h = []
