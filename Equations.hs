@@ -69,20 +69,17 @@ iterateUntil start p f x = extract (head (filter eq (drop start (zip3 xs (tail x
           eq (a, b, _) = p a == p b
           extract (x, _, n) = (n, x)
 
-refine :: Ord b => Int -> Int -> ([a] -> Bool) -> (a -> [b]) -> [[a]] -> (Int, [[a]])
-refine start step trivial eval xss = flatten (iterateUntil start length (refine1 step) (map (map (\x -> (x, eval x))) xss))
-    where flatten (n, xss) = (n, map (map fst) xss)
-          refine1 0 = id
-          refine1 step = parRefine (refine1 (step-1) . split)
-          first (x, (v:vs)) = v
-          next (x, (v:vs)) = (x, vs)
-          split = map (map next) . filter (not . trivial . map fst) . partitionBy first
+refine :: Ord b => Int -> Int -> ([a] -> Bool) -> [a -> b] -> [[a]] -> (Int, [[a]])
+refine start step trivial evals xss = iterateUntil start length (refine1 step evals) xss
+    where refine1 0 _ = id
+          refine1 step (eval:evals) = parRefine (refine1 (step-1) evals . split eval)
+          split eval = filter (not . trivial) . partitionBy eval
 
 parRefine :: ([a] -> [[a]]) -> ([[a]] -> [[a]])
 parRefine f = parFlatMap (parList (parList r0)) f
 
 partitionBy :: Ord b => (a -> b) -> [a] -> [[a]]
-partitionBy value = groupBy (\x y -> value x == value y) . sortBy (comparing value)
+partitionBy value = map (map fst) . groupBy (\x y -> snd x == snd y) . sortBy (comparing snd) . map (id &&& value)
 
 -- Pruning.
 
@@ -250,8 +247,7 @@ test depth ctx trivial seeds start base = do
   printf "Depth %d: " depth
   let cs0 = filter (not . null) [ terms ctx base ty | ty <- allTypes ctx ]
   printf "%d terms, " (length (concat cs0))
-  let funs = map ((memoSym ctx *** id) . useSeed) seeds
-      evals x = [ toValue (eval ctxFun x) | (ctxFun, toValue) <- funs ]
+  let evals = [ toValue . eval (memoSym ctx ctxFun) | (ctxFun, toValue) <- map useSeed seeds ]
       (n, cs1) = refine start 50 trivial evals cs0
       cs = map sort cs1
   printf "%d classes, %d raw equations, %d tests.\n"
