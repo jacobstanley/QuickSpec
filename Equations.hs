@@ -63,20 +63,21 @@ undefinedSyms = typeNub . concatMap (makeUndefined . symbolClass) . typeNub
 
 -- Equivalence class refinement.
 
-iterateUntil :: Eq b => Int -> (a -> b) -> (a -> a) -> a -> (Int, a)
-iterateUntil start p f x = extract (head (filter eq (drop start (zip3 xs (tail xs) [0..]))))
-    where xs = iterate f x
-          eq (a, b, _) = p a == p b
-          extract (x, _, n) = (n, x)
+fixpoint :: Eq b => (a -> b) -> [a] -> (Int, a)
+fixpoint p xs = (id *** head) (head (filter eq (zip [0..] (tails xs))))
+  where eq (_, (x:y:_)) = p x == p y
 
-refine :: Ord b => Int -> Int -> ([a] -> Bool) -> [a -> b] -> [[a]] -> (Int, [[a]])
-refine start step trivial evals xss = iterateUntil start length (refine1 step evals) xss
-    where refine1 0 _ = id
-          refine1 step (eval:evals) = parRefine (refine1 (step-1) evals . split eval)
-          split eval = filter (not . trivial) . partitionBy eval
+refine :: Ord b => Int -> Int -> [a -> b] -> [[a]] -> (Int, [[a]])
+refine start step evals xss = ((+start) *** flatten) (fixpoint (length . flatten) (drop start (every step refines)))
+  where oneStep eval = withTrivial (parRefine (partitionBy eval))
+        refines = scanl (flip oneStep) ([], xss) evals
+        every n xs = head xs:every n (drop n xs)
+        flatten (triv, nontriv) = triv ++ nontriv
+        withTrivial f (triv, nontriv) = (triv ++ triv', nontriv')
+          where (triv', nontriv') = partition (null . drop 1) (f nontriv)
 
 parRefine :: ([a] -> [[a]]) -> ([[a]] -> [[a]])
---parRefine f = parFlatMap (parList (parList r0)) f
+--parRefine f xs = parFlatMap (parList r0) f xs
 parRefine = concatMap
 
 partitionBy :: Ord b => (a -> b) -> [a] -> [[a]]
@@ -242,14 +243,14 @@ someLaws ctx0 types depth = do
     when (not (any subsumes c)) $
          printf "*** missing term: %s = ???\n"
                 (show (mapVars (\s -> if s `elem` commonVars then s else s { name = "_" ++ name s }) x))
-
-test :: Int -> Context -> ([Term Symbol] -> Bool) -> [(StdGen, Int)] -> Int -> (TypeRep -> [Term Symbol]) -> IO (Int, [[Term Symbol]])
-test depth ctx trivial seeds start base = do
+-}
+test :: Int -> Context -> [(StdGen, Int)] -> Int -> (TypeRep -> [Term Symbol]) -> IO (Int, [[Term Symbol]])
+test depth ctx seeds start base = do
   printf "Depth %d: " depth
   let cs0 = filter (not . null) [ terms ctx base ty | ty <- allTypes ctx ]
   printf "%d terms, " (length (concat cs0))
   let evals = [ toValue . eval (memoSym ctx ctxFun) | (ctxFun, toValue) <- map useSeed seeds ]
-      (n, cs1) = refine start 50 trivial evals cs0
+      (n, cs1) = refine start 50 evals cs0
       cs = map sort cs1
   printf "%d classes, %d raw equations, %d tests.\n"
          (length cs)
@@ -261,12 +262,12 @@ memoSym :: Context -> (Symbol -> a) -> (Symbol -> a)
 memoSym ctx f = (arr !) . label
   where arr = listArray (0, length ctx - 1) (map f ctx)
 
-tests :: Int -> Context -> ([Term Symbol] -> Bool) -> [(StdGen, Int)] -> Int -> IO (Int, [[Term Symbol]])
-tests 0 _ _ _ _ = return (0, [])
-tests (d+1) ctx trivial vals start = do
-  (n0, cs0) <- tests d ctx (const False) vals start
+tests :: Int -> Context -> [(StdGen, Int)] -> Int -> IO (Int, [[Term Symbol]])
+tests 0 _ _ _ = return (0, [])
+tests (d+1) ctx vals start = do
+  (n0, cs0) <- tests d ctx vals start
   let reps = map head cs0
       base ty = [ t | t <- reps, termType t == ty ]
-  (n, cs) <- test (d+1) ctx trivial vals start base
-  (_, cs1) <- tests d ctx (const False) vals n
-  if cs0 == cs1 then return (n, cs) else tests (d+1) ctx trivial vals n
+  (n, cs) <- test (d+1) ctx vals start base
+  (_, cs1) <- tests d ctx vals n
+  if cs0 == cs1 then return (n, cs) else tests (d+1) ctx vals n
