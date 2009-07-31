@@ -215,7 +215,7 @@ someLaws ctx0 types depth = do
             ]
   seeds <- genSeeds
   putStrLn "== classes =="
-  (_, cs) <- tests depth ctx (\c -> drop 1 c == []) seeds 0
+  (_, cs) <- tests depth ctx seeds 0
   let eqs = map head
           $ partitionBy equationOrder
           $ [ (y,x) | (x:xs) <- cs, funTypes [termType x] == [], y <- xs ]
@@ -243,7 +243,7 @@ someLaws ctx0 types depth = do
     when (not (any subsumes c)) $
          printf "*** missing term: %s = ???\n"
                 (show (mapVars (\s -> if s `elem` commonVars then s else s { name = "_" ++ name s }) x))
--}
+
 test :: Int -> Context -> [(StdGen, Int)] -> Int -> (TypeRep -> [Term Symbol]) -> IO (Int, [[Term Symbol]])
 test depth ctx seeds start base = do
   printf "Depth %d: " depth
