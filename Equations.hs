@@ -76,7 +76,8 @@ refine start step trivial evals xss = iterateUntil start length (refine1 step ev
           split eval = filter (not . trivial) . partitionBy eval
 
 parRefine :: ([a] -> [[a]]) -> ([[a]] -> [[a]])
-parRefine f = parFlatMap (parList (parList r0)) f
+--parRefine f = parFlatMap (parList (parList r0)) f
+parRefine = concatMap
 
 partitionBy :: Ord b => (a -> b) -> [a] -> [[a]]
 partitionBy value = map (map fst) . groupBy (\x y -> snd x == snd y) . sortBy (comparing snd) . map (id &&& value)
@@ -215,7 +216,7 @@ someLaws ctx0 types depth = do
   putStrLn "== classes =="
   (_, cs) <- tests depth ctx (\c -> drop 1 c == []) seeds 0
   let eqs = map head
-          $ partitionBy (comparing equationOrder)
+          $ partitionBy equationOrder
           $ [ (y,x) | (x:xs) <- cs, funTypes [termType x] == [], y <- xs ]
   printf "%d raw equations.\n\n" (length eqs)
 --  let univ = concat [allTerms depth ctx t | t <- allTypes ctx]
