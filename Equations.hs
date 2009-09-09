@@ -77,8 +77,8 @@ refine start step evals xss = ((+start) *** flatten) (fixpoint (length . flatten
           where (triv', nontriv') = partition (null . drop 1) (f nontriv)
 
 parRefine :: ([a] -> [[a]]) -> ([[a]] -> [[a]])
---parRefine f xs = parFlatMap (parList r0) f xs
-parRefine = concatMap
+parRefine f xs = parFlatMap (parList r0) f xs
+--parRefine = concatMap
 
 partitionBy :: Ord b => (a -> b) -> [a] -> [[a]]
 partitionBy value = map (map fst) . groupBy (\x y -> snd x == snd y) . sortBy (comparing snd) . map (id &&& value)
