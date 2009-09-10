@@ -43,6 +43,12 @@ insertSym s = modifyUse (IntMap.insert s Set.empty)
 ($$) :: Int -> Int -> CC a Int
 f $$ x = do
   m <- fmap lookup get
+  case lookup2 f x m of
+    Just (_ := k) -> return k
+    Nothing -> f $$$ x
+
+f $$$ x = do
+  m <- fmap lookup get
   a <- fmap app get
   (f', fv) <- rep f
   (x', xv) <- rep x
