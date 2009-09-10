@@ -20,7 +20,7 @@ insert2 k1 k2 v m = IntMap.insertWith IntMap.union k1 (IntMap.singleton k2 v) m
 data FlatEqn = (Int, Int) := Int deriving (Eq, Ord, Show)
 
 data S a = S {
-      use :: IntMap (Set FlatEqn),
+      use :: !(IntMap (Set FlatEqn)),
       lookup :: IntMap (IntMap FlatEqn),
       app :: a -> a -> a
     } deriving Show
