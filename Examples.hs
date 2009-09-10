@@ -9,13 +9,10 @@ import Data.Ord
 import Data.Typeable
 import Test.QuickCheck
 
-boolVars = [
+bools = describe "bools" [
  var "x" False,
  var "y" False,
- var "z" False
- ]
-
-boolCons = describe "bools" [
+ var "z" False,
  con "&&" (&&),
  con "||" (||),
  con "not" not,
@@ -23,21 +20,17 @@ boolCons = describe "bools" [
  con "false" False
  ]
 
-baseVars = [
+base = [
  var "x" int,
  var "y" int,
  var "z" int ]
   where int :: Int
         int = undefined
 
-listVars = [
+lists = describe "lists" [
  var "xs" list,
  var "ys" list,
- var "zs" list ]
-  where list :: [Int]
-        list = undefined
-
-listCons = describe "lists" [
+ var "zs" list,
  con "++" ((++) :: [Int] -> [Int] -> [Int]),
 -- con "reverse" (reverse :: [Int] -> [Int]),
  con "head" (head :: [Int] -> Int),
@@ -49,6 +42,8 @@ listCons = describe "lists" [
 -- con "unit" (\x -> [x] :: [Int]),
  con "insertL" (Data.List.insert :: Int -> [Int] -> [Int]),
  con "null" (null :: [Int] -> Bool)]
+  where list :: [Int]
+        list = undefined
 
 mergeL :: [Int] -> [Int] -> [Int]
 mergeL [] xs = xs
@@ -114,13 +109,10 @@ npl :: Heap a -> Int
 npl Nil = 0
 npl (Branch n _ _ _) = n
 
-heapVars = [
+heaps = describe "heaps" [
  var "h" (Nil :: Heap Int),
  var "h1" (Nil :: Heap Int),
- var "h2" (Nil :: Heap Int)
- ]
-
-heapCons = describe "heaps" [
+ var "h2" (Nil :: Heap Int),
  con "toList" (\h -> toList h :: [Int]),
  con "fromList" (\xs -> fromList xs :: Heap Int),
  con "isEmpty" (\h -> empty (h :: Heap Int)),
@@ -133,7 +125,7 @@ heapCons = describe "heaps" [
 -- con "rightBranch" (rightBranch :: Heap Int -> Heap Int)
  ]
 
-natCons = describe "nats" [
+nats = describe "nats" [
  con "+" ((+) :: Int -> Int -> Int),
  con "-" ((-) :: Int -> Int -> Int),
  con "*" ((*) :: Int -> Int -> Int),
@@ -141,4 +133,4 @@ natCons = describe "nats" [
  con "0" (0 :: Int),
  con "1" (1 :: Int) ]
 
-main = laws 3 (baseVars ++ boolVars ++ boolCons ++ listVars ++ listCons ++ heapVars ++ heapCons) (about ["heaps"])
+main = laws 3 (base ++ bools ++ lists ++ heaps) (about ["heaps"])
