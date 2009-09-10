@@ -108,7 +108,7 @@ consequences d univ (t, u) = mapM_ unify (cons1 t u `mplus` cons1 u t)
             y' <- flatten y
             x' =:= y'
           cons1 t u = do
-            s <- mapM substs [ (v, d' `min` (d-1)) | (v, d') <- varDepths d t ]
+            s <- mapM substs [ (v, d' `min` d) | (v, d') <- varDepths d t ]
             return (subst s t, subst s u)
           substs (v, d) = [ (v, Const s) | (_, s, ty) <- takeWhile (\(d', _, _) -> d' <= d) univ, ty == symbolType v ]
 
