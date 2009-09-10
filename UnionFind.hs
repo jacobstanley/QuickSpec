@@ -52,7 +52,7 @@ rep t = do
     Nothing -> fmap (\s -> (t, IntMap.findWithDefault undefined t (repSet s))) get
     Just t' -> do
       (r, v) <- rep t'
-      putLinks (IntMap.insert t r m)
+      when (t' /= r) $ putLinks (IntMap.insert t r m)
       return (r, v)
 
 reps :: UF s (IntMap s)
