@@ -55,8 +55,8 @@ undefinedSyms :: Context -> Context
 undefinedSyms = typeNub . concatMap (makeUndefined . symbolClass) . typeNub
   where typeNub = nubBy (\s1 s2 -> symbolType s1 == symbolType s2)
         makeUndefined (Data x) =
-          Symbol { name = "undefined", label = undefined, isUndefined = True, typ = TConst,
-                   range = return (Data (undefined `asTypeOf` x)) }:
+          Symbol { name = "undefined", label = undefined, description = Nothing,
+                   isUndefined = True, typ = TConst, range = return (Data (undefined `asTypeOf` x)) }:
           case funTypes [typeOf x] of
             [] -> []
             _ -> makeUndefined (rhs x)
@@ -175,8 +175,6 @@ genSeeds = do
   let rnds rnd = rnd1 : rnds rnd2 where (rnd1, rnd2) = split rnd
   return (zip (rnds rnd) (concat (repeat [0,2..20])))
 
-laws ctx0 depth = someLaws ctx0 (allTypes ctx0) depth
-
 -- A definition is something of the form
 --   f x1..xn = u
 -- where all the xi are distinct variables, there is at least one
@@ -199,7 +197,10 @@ isDefinition (u, t) = typ (fun t) == TConst && all isVar (args t) && not (null (
 
 definitions es = nubBy (\(_, t) (_, t') -> fun t == fun t') (filter isDefinition es)
 
-someLaws ctx0 types depth = do
+allOfThem = const True
+about xs = any (\s -> description s `elem` map Just xs) . symbols
+
+laws depth ctx0 p = do
   hSetBuffering stdout NoBuffering
   let ctx = zipWith relabel [0..] (ctx0 ++ undefinedSyms ctx0)
   putStrLn "== API =="
@@ -229,8 +230,7 @@ someLaws ctx0 types depth = do
        | (i, (y,x)) <- zip [1..] (definitions eqs)
        ]
   putStrLn "== equations =="
-  let interesting (x, y) = interesting1 x || interesting1 y
-      interesting1 t = any (\t -> termType t `elem` types) (subterms t)
+  let interesting (x, y) = p x || p y
       pruned = filter interesting (prune ctx depth univ eqs)
   sequence_
        [ putStrLn (show i ++ ": "++ show y ++ " == " ++ show x)

@@ -15,7 +15,7 @@ boolVars = [
  var "z" False
  ]
 
-boolCons = [
+boolCons = describe "bools" [
  con "&&" (&&),
  con "||" (||),
  con "not" not,
@@ -37,7 +37,7 @@ listVars = [
   where list :: [Int]
         list = undefined
 
-listCons = [
+listCons = describe "lists" [
  con "++" ((++) :: [Int] -> [Int] -> [Int]),
 -- con "reverse" (reverse :: [Int] -> [Int]),
  con "head" (head :: [Int] -> Int),
@@ -120,20 +120,20 @@ heapVars = [
  var "h2" (Nil :: Heap Int)
  ]
 
-heapCons = [
--- con "toList" (\h -> toList h :: [Int]),
--- con "fromList" (\xs -> fromList xs :: Heap Int),
--- con "isEmpty" (\h -> empty (h :: Heap Int)),
--- con "findMin" (\h -> top h :: Int),
+heapCons = describe "heaps" [
+ con "toList" (\h -> toList h :: [Int]),
+ con "fromList" (\xs -> fromList xs :: Heap Int),
+ con "isEmpty" (\h -> empty (h :: Heap Int)),
+ con "findMin" (\h -> top h :: Int),
  con "insert" (\x h -> insert x h :: Heap Int),
  con "deleteMin" (\h -> delete h :: Heap Int),
  con "merge" (\h1 h2 -> merge h1 h2 :: Heap Int),
- con "empty" (Nil :: Heap Int),
- con "leftBranch" (leftBranch :: Heap Int -> Heap Int),
- con "rightBranch" (rightBranch :: Heap Int -> Heap Int)
+ con "empty" (Nil :: Heap Int)
+-- con "leftBranch" (leftBranch :: Heap Int -> Heap Int),
+-- con "rightBranch" (rightBranch :: Heap Int -> Heap Int)
  ]
 
-natCons = [
+natCons = describe "nats" [
  con "+" ((+) :: Int -> Int -> Int),
  con "-" ((-) :: Int -> Int -> Int),
  con "*" ((*) :: Int -> Int -> Int),
@@ -141,4 +141,4 @@ natCons = [
  con "0" (0 :: Int),
  con "1" (1 :: Int) ]
 
-main = someLaws (baseVars ++ boolVars ++ boolCons ++ listVars ++ listCons ++ heapVars ++ heapCons) [typeOf (undefined :: Heap Int)] 3
+main = laws 3 (baseVars ++ boolVars ++ boolCons ++ listVars ++ listCons ++ heapVars ++ heapCons) (about ["heaps"])

@@ -16,7 +16,7 @@ import Test.QuickCheck.Gen
 
 data SymbolType = TVar | TConst deriving (Eq, Ord, Show)
 data Symbol
-  = Symbol { name :: String, label :: Int, isUndefined :: Bool, typ :: SymbolType, range :: Gen Data }
+  = Symbol { name :: String, description :: Maybe String, label :: Int, isUndefined :: Bool, typ :: SymbolType, range :: Gen Data }
   deriving Typeable
 
 instance Show Symbol where
@@ -31,16 +31,19 @@ instance Ord Symbol where
 relabel :: Int -> Symbol -> Symbol
 relabel l e = e { label = l }
 
+describe :: String -> [Symbol] -> [Symbol]
+describe str ss = map (\s -> s { description = Just str }) ss
+
 isOp :: Symbol -> Bool
 isOp s | typ s == TConst && name s == "[]" = False
 isOp s | typ s == TConst = not (all isAlphaNum (name s))
 isOp _ = False
 
 var :: forall a. (Classify a, Arbitrary a) => String -> a -> Symbol
-var name _ = Symbol { name = name, label = undefined, isUndefined = False, typ = TVar, range = fmap Data (arbitrary :: Gen a) }
+var name _ = Symbol { name = name, label = undefined, description = Nothing, isUndefined = False, typ = TVar, range = fmap Data (arbitrary :: Gen a) }
 
 con :: Classify a => String -> a -> Symbol
-con name impl = Symbol { name = name, label = undefined, isUndefined = False, typ = TConst, range = fmap Data (return impl) }
+con name impl = Symbol { name = name, label = undefined, description = Nothing, isUndefined = False, typ = TConst, range = fmap Data (return impl) }
 
 data Term c = Const c | Var Symbol | App (Term c) (Term c) deriving (Typeable, Eq)
 
@@ -60,6 +63,11 @@ vars :: Term c -> [Symbol]
 vars (App s t) = nub (vars s ++ vars t)
 vars (Var s)   = [s]
 vars _         = []
+
+symbols :: Term Symbol -> [Symbol]
+symbols (App s t) = nub (symbols s ++ symbols t)
+symbols (Var s)   = [s]
+symbols (Const s) = [s]
 
 mapVars :: (Symbol -> Symbol) -> Term c -> Term c
 mapVars f (Const k) = Const k
