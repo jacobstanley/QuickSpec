@@ -8,6 +8,7 @@ import qualified Data.List
 import Data.Ord
 import Data.Typeable
 import Test.QuickCheck
+import System
 
 bools = describe "bools" [
  var "x" False,
@@ -32,7 +33,7 @@ lists = describe "lists" [
  var "ys" list,
  var "zs" list,
  con "++" ((++) :: [Int] -> [Int] -> [Int]),
--- con "reverse" (reverse :: [Int] -> [Int]),
+ con "reverse" (reverse :: [Int] -> [Int]),
  con "head" (head :: [Int] -> Int),
  con "tail" (tail :: [Int] -> [Int]),
  con ":" ((:) :: Int -> [Int] -> [Int]),
@@ -133,4 +134,17 @@ nats = describe "nats" [
  con "0" (0 :: Int),
  con "1" (1 :: Int) ]
 
-main = laws 3 (base ++ bools ++ lists ++ heaps) (about ["heaps"])
+examples = [
+ ("nats", (base ++ nats, allOfThem)),
+ ("bools", (base ++ bools, allOfThem)),
+ ("lists", (base ++ bools ++ lists, about ["lists"])),
+ ("heaps", (base ++ bools ++ lists ++ heaps, about ["heaps"]))
+ ]
+
+main = do
+  args <- getArgs
+  let test = case args of
+               [] -> "bools"
+               [x] -> x
+      Just (cons, p) = lookup test examples
+  laws 3 cons p
