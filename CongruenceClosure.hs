@@ -65,7 +65,7 @@ t =?= u = do
 
 propagate (a, b) = do
   (unified, pending) <- propagate1 (a, b)
-  mapM_ propagate (concat pending)
+  mapM_ propagate pending
   return unified
 
 propagate1 (a, b) = do
@@ -83,19 +83,28 @@ updateUses r r' funUses argUses = do
   modifyFunUse (IntMap.delete r)
   modifyArgUse (IntMap.delete r)
   modifyLookup (IntMap.delete r)
-  let {-# INLINE iterUses #-}
-      iterUses uses addUses missing insert2 lookup2 = forM uses $ \(x, c) -> do
-        (x', _) <- rep x
-        m <- gets lookup
-        case lookup2 x' r' m of
-          Just k -> return [(c, k)]
-          Nothing -> do
-            missing x
-            modifyLookup (insert2 x' r' c)
-            addUses [(x', c)] r'
-            return []
-  funs <- iterUses funUses addFunUses (\x -> modifyLookup (delete2 x r)) insert2 lookup2
-  args <- iterUses argUses addArgUses (\f -> return ()) (flip insert2) (flip lookup2)
+  let {-# INLINE foldUses #-}
+      foldUses uses lookup e skeleton = foldM op ([], e) uses
+        where op (pending, s) (x, c) = do
+                (x', _) <- rep x
+                m <- lookup x' s
+                case m of
+                  Just k -> return ((c, k):pending, s)
+                  Nothing -> fmap (\s' -> (pending, s')) (skeleton x' x c s)
+  (funs, _) <-
+    foldUses funUses (\x _ -> gets (lookup2 x r' . lookup)) undefined $
+    \x' x c s -> do
+      modifyLookup (delete2 x r . insert2 x' r' c)
+      addFunUses [(x', c)] r'
+      return s
+  argLookup <- gets (IntMap.findWithDefault IntMap.empty r' . lookup)
+  (args, (argUses', argLookup')) <-
+    foldUses argUses (\f (_, m) -> return (IntMap.lookup f m)) ([], argLookup) $
+    \f' f c (argUses, argLookup) -> do
+      return ((f', c):argUses, IntMap.insert f' c argLookup)
+
+  addArgUses argUses' r'
+  modifyLookup (IntMap.insert r' argLookup')
   return (funs ++ args)
 
 rep :: Int -> CC a (Int, a)
