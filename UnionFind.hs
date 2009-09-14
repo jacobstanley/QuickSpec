@@ -34,6 +34,7 @@ newSym v = do
 insertRep s v = modifyReps (IntMap.insert s v)
 
 (=:=) :: Int -> Int -> UF s (Maybe Replacement)
+s =:= t | s == t = return Nothing
 s =:= t = do
   (rs, vs) <- rep s
   (rt, vt) <- rep t

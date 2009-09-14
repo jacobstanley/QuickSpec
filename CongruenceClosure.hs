@@ -6,10 +6,9 @@ import Prelude hiding (lookup)
 import Control.Monad.State.Strict
 import Data.IntMap(IntMap)
 import qualified Data.IntMap as IntMap
-import Data.Set(Set)
-import qualified Data.Set as Set
 import UnionFind(UF, Replacement((:>)))
 import qualified UnionFind as UF
+import Data.Maybe
 
 lookup2 :: Int -> Int -> IntMap (IntMap a) -> Maybe a
 lookup2 k1 k2 m = IntMap.lookup k2 (IntMap.findWithDefault IntMap.empty k1 m)
@@ -17,42 +16,44 @@ lookup2 k1 k2 m = IntMap.lookup k2 (IntMap.findWithDefault IntMap.empty k1 m)
 insert2 :: Int -> Int -> a -> IntMap (IntMap a) -> IntMap (IntMap a)
 insert2 k1 k2 v m = IntMap.insertWith IntMap.union k1 (IntMap.singleton k2 v) m
 
+delete2 :: Int -> Int -> IntMap (IntMap a) -> IntMap (IntMap a)
+delete2 k1 k2 m = IntMap.adjust (IntMap.delete k2) k1 m
+
 data FlatEqn = (Int, Int) := Int deriving (Eq, Ord, Show)
 
 data S a = S {
-      use :: !(IntMap (Set FlatEqn)),
-      lookup :: IntMap (IntMap FlatEqn),
+      funUse :: !(IntMap [(Int, Int)]),
+      argUse :: !(IntMap [(Int, Int)]),
+      lookup :: IntMap (IntMap Int),
       app :: a -> a -> a
     } deriving Show
 
 type CC a = StateT (S a) (UF a)
 
-modifyUse f = modify (\s -> s { use = f (use s) })
+modifyFunUse f = modify (\s -> s { funUse = f (funUse s) })
+modifyArgUse f = modify (\s -> s { argUse = f (argUse s) })
+addFunUses xs s = modifyFunUse (IntMap.insertWith (++) s xs)
+addArgUses xs s = modifyArgUse (IntMap.insertWith (++) s xs)
 modifyLookup f = modify (\s -> s { lookup = f (lookup s) })
 putLookup l = modifyLookup (const l)
 
 newSym :: a -> CC a Int
-newSym x = do
-  s <- lift (UF.newSym x)
-  insertSym s
-  return s
-
-insertSym :: Int -> CC a ()
-insertSym s = modifyUse (IntMap.insert s Set.empty)
+newSym x = lift (UF.newSym x)
 
 ($$) :: Int -> Int -> CC a Int
 f $$ x = do
-  m <- fmap lookup get
-  a <- fmap app get
+  m <- gets lookup
+  a <- gets app
   (f', fv) <- rep f
   (x', xv) <- rep x
-  case lookup2 f' x' m of
+  case lookup2 x' f' m of
     Nothing -> do
       c <- newSym (fv `a` xv)
-      putLookup (insert2 f' x' ((f, x) := c) m)
-      mapM_ (addUse ((f, x) := c)) [f', x']
+      putLookup (insert2 x' f' c m)
+      addFunUses [(x', c)] f'
+      addArgUses [(f', c)] x'
       return c
-    Just ((g, y) := k) -> return k
+    Just k -> return k
 
 (=:=) :: Int -> Int -> CC a Bool
 a =:= b = propagate (a, b)
@@ -71,22 +72,31 @@ propagate1 (a, b) = do
   res <- lift (a UF.=:= b)
   case res of
     Nothing -> return (False, [])
-    Just (r :> r') -> fmap (\x -> (True, x)) $ do
-      u <- fmap use get
-      forM (Set.toList (IntMap.findWithDefault undefined r u)) $ \((f, x) := c) -> do
-        removeUse ((f, x) := c) r
-        (f', _) <- rep f
-        (x', _) <- rep x
-        m <- fmap lookup get
-        case lookup2 f' x' m of
-          Just ((g, y) := k) -> return [(c, k)]
-          Nothing -> do
-            modifyLookup (insert2 f' x' ((f, x) := c))
-            addUse ((f, x) := c) r'
-            return []
+    Just (r :> r') -> do
+      funUses <- gets (IntMap.lookup r . funUse)
+      argUses <- gets (IntMap.lookup r . argUse)
+      case (funUses, argUses) of
+        (Nothing, Nothing) -> return (True, [])
+        _ -> fmap (\x -> (True, x)) (updateUses r r' (fromMaybe [] funUses) (fromMaybe [] argUses))
 
-addUse e s = modifyUse (IntMap.update (Just . (Set.insert e)) s)
-removeUse e s = modifyUse (IntMap.update (Just . (Set.delete e)) s)
+updateUses r r' funUses argUses = do
+  modifyFunUse (IntMap.delete r)
+  modifyArgUse (IntMap.delete r)
+  modifyLookup (IntMap.delete r)
+  let {-# INLINE iterUses #-}
+      iterUses uses addUses missing insert2 lookup2 = forM uses $ \(x, c) -> do
+        (x', _) <- rep x
+        m <- gets lookup
+        case lookup2 x' r' m of
+          Just k -> return [(c, k)]
+          Nothing -> do
+            missing x
+            modifyLookup (insert2 x' r' c)
+            addUses [(x', c)] r'
+            return []
+  funs <- iterUses funUses addFunUses (\x -> modifyLookup (delete2 x r)) insert2 lookup2
+  args <- iterUses argUses addArgUses (\f -> return ()) (flip insert2) (flip lookup2)
+  return (funs ++ args)
 
 rep :: Int -> CC a (Int, a)
 rep s = lift (UF.rep s)
@@ -103,4 +113,4 @@ frozen x = do
   return r
 
 runCC :: (s -> s -> s) -> (s -> s -> s) -> [s] -> CC s a -> a
-runCC app min syms m = UF.runUF min syms (evalStateT (mapM_ insertSym [0..length syms-1] >> m) (S IntMap.empty IntMap.empty app))
+runCC app min syms m = UF.runUF min syms (evalStateT m (S IntMap.empty IntMap.empty IntMap.empty app))

@@ -15,7 +15,7 @@ results: Examples
 		(./Examples $(test) | grep "== equations ==" -B 0 -A 9999 | sed 's/^/  /') && echo && ) true) | tee $@
 
 bools: Examples
-	./Examples bools
+	zsh -i -c "bench ./Examples bools"
 
 Examples: *.hs
 	ghc --make -O2 Examples.hs
