@@ -85,8 +85,7 @@ updateUses r r' funUses argUses = do
   modifyArgUse (IntMap.delete r)
   modifyLookup (IntMap.delete r)
   forM_ funUses $ \(x, c) -> modifyLookup (delete2 x r)
-  let {-# INLINE repPair #-}
-      repPair (x, c) = do
+  let repPair (x, c) = do
         (x', _) <- rep x
         return (x', c)
   funUses' <- mapM repPair funUses
@@ -94,19 +93,20 @@ updateUses r r' funUses argUses = do
 
   m <- gets lookup
 
-  let (funPending, funNewUses, m') = foldl' op e funUses'
-      op (pending, newUses, m) (x', c) =
-        case lookup2 x' r' m of
-          Just k -> ((c, k):pending, newUses, m)
-          Nothing -> (pending, (x', c):newUses, insert2 x' r' c m)
-      e = ([], [], m)
+  let foldUses insert lookup pending m uses = foldl' op e uses
+        where op (pending, newUses, m) (x', c) =
+                case lookup x' m of
+                  Just k -> ((c, k):pending, newUses, m)
+                  Nothing -> (pending, (x', c):newUses, insert x' c m)
+              e = (pending, [], m)
 
-  let (pending, argNewUses, argM) = foldl' op e argUses'
-      op (pending, newUses, m) (f', c) =
-        case IntMap.lookup f' m of
-          Just k -> ((c, k):pending, newUses, m)
-          Nothing -> (pending, (f', c):newUses, IntMap.insert f' c m)
-      e = (funPending, [], IntMap.findWithDefault IntMap.empty r' m')
+      (funPending, funNewUses, m') = foldUses (\x' c m -> insert2 x' r' c m)
+                                              (\x' m -> lookup2 x' r' m)
+                                              [] m funUses'
+
+      (pending, argNewUses, argM) = foldUses IntMap.insert IntMap.lookup funPending
+                                             (IntMap.findWithDefault IntMap.empty r' m')
+                                             argUses'
 
   addFunUses funNewUses r'
   addArgUses argNewUses r'
