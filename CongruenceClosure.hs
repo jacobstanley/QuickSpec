@@ -9,6 +9,7 @@ import qualified Data.IntMap as IntMap
 import UnionFind(UF, Replacement((:>)))
 import qualified UnionFind as UF
 import Data.Maybe
+import Data.List(foldl')
 
 lookup2 :: Int -> Int -> IntMap (IntMap a) -> Maybe a
 lookup2 k1 k2 m = IntMap.lookup k2 (IntMap.findWithDefault IntMap.empty k1 m)
@@ -83,29 +84,36 @@ updateUses r r' funUses argUses = do
   modifyFunUse (IntMap.delete r)
   modifyArgUse (IntMap.delete r)
   modifyLookup (IntMap.delete r)
-  let {-# INLINE foldUses #-}
-      foldUses uses lookup e skeleton = foldM op ([], e) uses
-        where op (pending, s) (x, c) = do
-                (x', _) <- rep x
-                m <- lookup x' s
-                case m of
-                  Just k -> return ((c, k):pending, s)
-                  Nothing -> fmap (\s' -> (pending, s')) (skeleton x' x c s)
-  (funs, _) <-
-    foldUses funUses (\x _ -> gets (lookup2 x r' . lookup)) undefined $
-    \x' x c s -> do
-      modifyLookup (delete2 x r . insert2 x' r' c)
-      addFunUses [(x', c)] r'
-      return s
-  argLookup <- gets (IntMap.findWithDefault IntMap.empty r' . lookup)
-  (args, (argUses', argLookup')) <-
-    foldUses argUses (\f (_, m) -> return (IntMap.lookup f m)) ([], argLookup) $
-    \f' f c (argUses, argLookup) -> do
-      return ((f', c):argUses, IntMap.insert f' c argLookup)
+  forM_ funUses $ \(x, c) -> modifyLookup (delete2 x r)
+  let {-# INLINE repPair #-}
+      repPair (x, c) = do
+        (x', _) <- rep x
+        return (x', c)
+  funUses' <- mapM repPair funUses
+  argUses' <- mapM repPair argUses
 
-  addArgUses argUses' r'
-  modifyLookup (IntMap.insert r' argLookup')
-  return (funs ++ args)
+  m <- gets lookup
+
+  let (funPending, funNewUses, m') = foldl' op e funUses'
+      op (pending, newUses, m) (x', c) =
+        case lookup2 x' r' m of
+          Just k -> ((c, k):pending, newUses, m)
+          Nothing -> (pending, (x', c):newUses, insert2 x' r' c m)
+      e = ([], [], m)
+
+  let (pending, argNewUses, argM) = foldl' op e argUses'
+      op (pending, newUses, m) (f', c) =
+        case IntMap.lookup f' m of
+          Just k -> ((c, k):pending, newUses, m)
+          Nothing -> (pending, (f', c):newUses, IntMap.insert f' c m)
+      e = (funPending, [], IntMap.findWithDefault IntMap.empty r' m')
+
+  addFunUses funNewUses r'
+  addArgUses argNewUses r'
+
+  putLookup (if IntMap.null argM then m' else IntMap.insert r' argM m')
+
+  return pending
 
 rep :: Int -> CC a (Int, a)
 rep s = lift (UF.rep s)
