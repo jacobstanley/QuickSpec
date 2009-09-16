@@ -14,8 +14,8 @@ results: Examples
 		echo $(test): &&\
 		(./Examples $(test) | grep "== equations ==" -B 0 -A 9999 | sed 's/^/  /') && echo && ) true) | tee $@
 
-bools: Examples
-	zsh -i -c "bench ./Examples bools"
+bools nats lists heaps: Examples
+	zsh -i -c "bench ./Examples $@"
 
 Examples: *.hs
 	ghc --make -O2 Examples.hs

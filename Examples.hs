@@ -40,7 +40,7 @@ lists = describe "lists" [
  con "[]" ([] :: [Int]),
  con "sort" (Data.List.sort :: [Int] -> [Int]),
  con "mergeL" mergeL,
--- con "unit" (\x -> [x] :: [Int]),
+ con "unit" (\x -> [x] :: [Int]),
  con "insertL" (Data.List.insert :: Int -> [Int] -> [Int]),
  con "null" (null :: [Int] -> Bool)]
   where list :: [Int]
