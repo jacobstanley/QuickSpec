@@ -9,6 +9,8 @@ import Data.Ord
 import Data.Typeable
 import Test.QuickCheck
 import System
+import System.Random
+import Control.Monad
 
 bools = describe "bools" [
  var "x" False,
@@ -138,7 +140,8 @@ examples = [
  ("nats", (base ++ nats, allOfThem)),
  ("bools", (base ++ bools, allOfThem)),
  ("lists", (base ++ bools ++ lists, about ["lists"])),
- ("heaps", (base ++ bools ++ lists ++ heaps, about ["heaps"]))
+ ("heaps", (base ++ bools ++ lists ++ heaps, about ["heaps"])),
+ ("arrays", (base ++ arrays, allOfThem))
  ]
 
 main = do
@@ -148,3 +151,29 @@ main = do
                [x] -> x
       Just (cons, p) = lookup test examples
   laws 3 cons p
+
+newtype Index = Index Int deriving (Eq, Ord, CoArbitrary, Random, Num, Show, Typeable)
+instance Arbitrary Index where arbitrary = choose (0, 15)
+newtype Array = Array [Int] deriving (Eq, Ord, CoArbitrary, Typeable)
+instance Arbitrary Array where arbitrary = fmap Array (replicateM 16 arbitrary)
+
+instance Classify Array where
+  type Value Array = Array
+  evaluate = return
+
+instance Classify Index where
+  type Value Index = Index
+  evaluate = return
+
+arrays = [
+ var "A" (Array undefined),
+ var "B" (Array undefined),
+ var "C" (Array undefined),
+ var "I" (Index undefined),
+ var "J" (Index undefined),
+ var "K" (Index undefined),
+ con "new" (Array (replicate 16 0)),
+ con "get" (\(Index ix) (Array a) -> a !! ix),
+ con "set" (\(Index ix) v (Array a) -> Array [ if i == ix then v else a !! i | i <- [0..15] ]),
+ con "0" (0 :: Int)
+ ]
