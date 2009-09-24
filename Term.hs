@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs,TypeFamilies,FlexibleInstances,FlexibleContexts,DeriveDataTypeable,ScopedTypeVariables #-}
+{-# LANGUAGE GADTs,TypeFamilies,FlexibleInstances,FlexibleContexts,DeriveDataTypeable,ScopedTypeVariables,StandaloneDeriving #-}
 module Term where
 
 import CatchExceptions
@@ -74,6 +74,11 @@ mapVars f (Const k) = Const k
 mapVars f (Var v)   = Var (f v)
 mapVars f (App t u) = App (mapVars f t) (mapVars f u)
 
+skeleton :: Term c -> Term c
+skeleton (Var _) = Var (Symbol { label = 0, name = "*", typ = TVar })
+skeleton (Const c) = Const c
+skeleton (App t u) = App (skeleton t) (skeleton u)
+
 subterms, directSubterms :: Term c -> [Term c]
 subterms t = t:concatMap subterms (directSubterms t)
 directSubterms (App t u) = [t, u]
@@ -92,19 +97,6 @@ instance Ord s => Ord (Term s) where
     
     args (App s t) = [s, t]
     args _         = []
-
-equationOrder (t, u) = (depth (ignoreFree t), size (ignoreFree t), depth t, size t, -(unsaturation (termType t)), t, u)
-  where occur = length . vars
-        ignoreFree t | isFree t = Const (fun t)
-        ignoreFree (App t u) = App (ignoreFree t) (ignoreFree u)
-        ignoreFree t = t
-        isFree (App t (Var s)) = isFree t && s `notElem` vars t
-        isFree (Const s) = True
-        isFree _ = False
-        unsaturation ty =
-          case funTypes [ty] of
-            [] -> 0
-            [(_, ty')] -> 1 + unsaturation ty'
 
 instance Show (Term Symbol) where
   showsPrec p t = showString (showApp p (fun t) (args t))
@@ -131,6 +123,8 @@ instance Show (Term Symbol) where
        parenFun p (concat (intersperse " " (map (show' 2) (Const f:xs))))
 
      show' p x = showsPrec p x ""
+
+deriving instance Show (Term Int)
 
 fun :: Term Symbol -> Symbol
 fun (App t u) = fun t
