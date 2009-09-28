@@ -141,7 +141,8 @@ examples = [
  ("bools", (base ++ bools, allOfThem)),
  ("lists", (base ++ bools ++ lists, about ["lists"])),
  ("heaps", (base ++ bools ++ lists ++ heaps, about ["heaps"])),
- ("arrays", (base ++ arrays, allOfThem))
+ ("arrays", (base ++ arrays, allOfThem)),
+ ("comp", (base ++ comp, allOfThem))
  ]
 
 main = do
@@ -177,3 +178,10 @@ arrays = [
  con "set" (\(Index ix) v (Array a) -> Array [ if i == ix then v else a !! i | i <- [0..15] ]),
  con "0" (0 :: Int)
  ]
+
+comp = [
+ var "f" (undefined :: (Int -> Int)),
+ var "g" (undefined :: (Int -> Int)),
+ var "h" (undefined :: (Int -> Int)),
+ con "." (\f g x -> f (g (x :: Int) :: Int) :: Int),
+ con "id" (id :: Int -> Int)]
