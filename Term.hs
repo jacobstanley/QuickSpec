@@ -98,6 +98,19 @@ instance Ord s => Ord (Term s) where
     args (App s t) = [s, t]
     args _         = []
 
+equationOrder (cond, t, u) = (cond, depth (ignoreFree t), size (ignoreFree t), depth t, size t, -(unsaturation (termType t)), t, u)
+  where occur = length . vars
+        ignoreFree t | isFree t = Const (fun t)
+        ignoreFree (App t u) = App (ignoreFree t) (ignoreFree u)
+        ignoreFree t = t
+        isFree (App t (Var s)) = isFree t && s `notElem` vars t
+        isFree (Const s) = True
+        isFree _ = False
+        unsaturation ty =
+          case funTypes [ty] of
+            [] -> 0
+            [(_, ty')] -> 1 + unsaturation ty'
+
 instance Show (Term Symbol) where
   showsPrec p t = showString (showApp p (fun t) (args t))
    where
