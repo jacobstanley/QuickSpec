@@ -2,7 +2,7 @@
 
 module Main where
 
-import Equations hiding (merge, evaluate)
+import Equations hiding (merge)
 import Term
 import qualified Data.List
 import Data.Ord
