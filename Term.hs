@@ -98,7 +98,7 @@ instance Ord s => Ord (Term s) where
     args (App s t) = [s, t]
     args _         = []
 
-equationOrder (cond, t, u) = (cond, depth (ignoreFree t), size (ignoreFree t), depth t, size t, -(unsaturation (termType t)), t, u)
+equationOrder (t, u) = (depth (ignoreFree t), size (ignoreFree t), depth t, size t, -(unsaturation (termType t)), t, u)
   where occur = length . vars
         ignoreFree t | isFree t = Const (fun t)
         ignoreFree (App t u) = App (ignoreFree t) (ignoreFree u)

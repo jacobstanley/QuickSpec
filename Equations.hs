@@ -71,39 +71,33 @@ satisfied :: Ord a => (Symbol -> a) -> Condition -> Bool
 satisfied value (a :/= b) = value a /= value b
 satisfied value Always = True
 
-data Classes a = Classes [a] [Condition -> Bool] [[Int]]
+data Classes a = Classes [Condition -> Bool] [TestResults a]
+data TestResults a = TestResults [a] [[Int]]
 
-before :: Eq a => Classes a -> Classes a -> Classes a
-Classes xs ps vs `before` Classes ys ps' vs' | xs == ys = Classes xs (ps ++ ps') (vs ++ vs')
+pack :: [[a]] -> Classes a
+pack xss = Classes [] [ TestResults xs [] | xs <- xss ]
 
-evaluate :: Ord b => [(a -> b, Condition -> Bool)] -> [a] -> Classes a
-evaluate ss xs = Classes xs (map snd ss) (map (collate . fst) ss)
-  where collate f = [ Map.findWithDefault undefined v m | v <- vs ]
+evaluate :: Ord b => [(a -> b, Condition -> Bool)] -> Classes a -> Classes a
+evaluate ss (Classes cs rss) = Classes (cs ++ map snd ss)
+                                       [ TestResults xs (vss ++ map (evaluate1 xs) ss)
+                                       | TestResults xs vss <- rss ]
+  where evaluate1 xs (eval, _) = collate (map eval xs)
+        collate vs = [ Map.findWithDefault undefined v m | v <- vs ]
           where m = Map.fromList (zip (nubSort vs) [0..])
-                vs = map f xs
 
 restrict :: Condition -> Classes a -> Classes a
-restrict c (Classes xs ps vss) = Classes xs ps' vss'
-  where (ps', vss') = unzip ss'
-        ss' = [ (p, vs) | (p, vs) <- zip ps vss, p c ]
+restrict c (Classes ps rss) = Classes (filter keep ps) (map restrict1 rss)
+  where keep p = p c
+        restrict1 (TestResults xs vss) =
+          TestResults xs [ vs | (p, vs) <- zip ps vss, p c ]
 
 limit :: Int -> Classes a -> Classes a
-limit n (Classes xs css vss) = Classes xs (take n css) (take n vss)
+limit n (Classes ps rss) = Classes (take n ps) (map limit1 rss)
+  where limit1 (TestResults xs rss) = TestResults xs (take n rss)
 
-extract :: Classes a -> [(a, [Int])]
-extract (Classes xs _ vss) = zip xs (transpose vss)
-
-refineBy :: Int -> [[(a, [Int])]] -> [[(a, [Int])]]
-refineBy n = parRefine (map (map (id *** drop n)) . partitionBy (take n . snd))
-
-fixpoint :: Eq b => (a -> b) -> [a] -> (Int, a)
-fixpoint p xs = (id *** head) (head (filter eq (zip [0..] (tails xs))))
-  where eq (_, (x:y:_)) = p x == p y
-
-refine :: Int -> Int -> [(a, [Int])] -> (Int, [[a]])
-refine start step xs = ((+start) *** map (map fst))
-                          (fixpoint length (iterate (refineBy step)
-                                                    (refineBy start [xs])))
+unpack :: Classes a -> [[a]]
+unpack (Classes _ rss) = concatMap unpack1 rss
+  where unpack1 (TestResults xs vss) = map (map fst) (partitionBy snd (zip xs (transpose vss)))
 
 parRefine :: ([a] -> [[a]]) -> ([[a]] -> [[a]])
 parRefine f xs = parFlatMap (parList r0) f xs
@@ -178,17 +172,12 @@ loadUniv univ = fmap (sortBy (comparing (\(d,_,_) -> d))) (mapM f univ)
             t' <- flatten (killSymbols t)
             return (depth t, t', termType t)
 
-prune :: Context -> Int -> [Term Symbol] -> [(Condition, Term Symbol, Term Symbol)] -> [(Condition, Term Symbol, Term Symbol)]
-prune ctx d univ0 es = runCCctx ctx $ do
+prune :: Context -> Int -> [Term Symbol] -> [(Term Symbol, Term Symbol)] -> [(Condition, [(Term Symbol, Term Symbol)])] -> [(Condition, Term Symbol, Term Symbol)]
+prune ctx d univ0 es ess = runCCctx ctx $ do
   univ <- loadUniv univ0
-  let (esUncond0, esCond) = partition (\(cond, _, _) -> cond == Always) es
-      esUncond = map (\(_, t, u) -> (t, u)) esUncond0
-      essCond = map (\xs@((cond,_,_):_) -> (cond, map (\(_, t, u) -> (t, u)) xs)) (partitionBy (\(c1, _, _) -> c1) esCond)
-  esUncond' <- fmap (map (\(t, u) -> (Always, t, u))) (prune1 d univ [] esUncond)
-  essCond' <- mapM (\(cond, es) -> fmap (map (\(t, u) -> (cond, t, u))) (frozen (prune1 d univ (condVars cond) es))) essCond
---  prune2 d univ [] (reverse (sort es'))
---  return (esUncond' ++ concat essCond')
-  return (nubBy isomorphic (esUncond' ++ concat essCond'))
+  es' <- fmap (map (\(t, u) -> (Always, t, u))) (prune1 d univ [] es)
+  ess' <- mapM (\(cond, es) -> fmap (map (\(t, u) -> (cond, t, u))) (frozen (prune1 d univ (condVars cond) es))) ess
+  return (nubBy isomorphic (es' ++ concat ess'))
 
 condVars (a :/= b) = [a, b]
 condVars Always = []
@@ -232,7 +221,7 @@ genSeeds = do
 -- where all the xi are distinct variables, there is at least one
 -- parameter to f, and if there is an application of f inside u,
 -- then one of the xi mustn't appear in that application.
-isDefinition (cond, u, t) = cond == Always && typ (fun t) == TConst && all isVar (args t) && not (null (args t)) && nub (args t) == args t && acyclic u
+isDefinition (u, t) = typ (fun t) == TConst && all isVar (args t) && not (null (args t)) && nub (args t) == args t && acyclic u
   where isVar (Var _) = True
         isVar _ = False
         isCon (Const _) = True
@@ -247,7 +236,7 @@ isDefinition (cond, u, t) = cond == Always && typ (fun t) == TConst && all isVar
         (x:xs) `isSublistOf` (y:ys) | x == y = xs `isSublistOf` ys
                                     | otherwise = (x:xs) `isSublistOf` ys
 
-definitions es = nubBy (\(_, _, t) (_, _, t') -> fun t == fun t') (filter isDefinition es)
+definitions es = nubBy (\(_, t) (_, t') -> fun t == fun t') (filter isDefinition es)
 
 allOfThem = const True
 about xs = any (\s -> description s `elem` map Just xs) . symbols
@@ -268,60 +257,66 @@ laws depth ctx0 p = do
             ]
   seeds <- genSeeds
   putStrLn "== classes =="
-{-  (_, cs) <- tests depth ctx seeds 0
-  return ()-}
-{-  let eqs = map head
-          $ partitionBy equationOrder
-          $ [ (cond,y,x) | Class conds (x:xs) <- cs, cond <- reduce conds, funTypes [termType x] == [], y <- xs ]
-  printf "%d raw equations.\n\n" (length eqs)
---  let univ = concat [allTerms depth ctx t | t <- allTypes ctx]
-  let univ = concatMap members (filter (any unconditional . condition) cs)
+  cs <- tests depth ctx seeds
+  let eqs cond = map head
+               $ partitionBy equationOrder
+               $ [ (y,x) | x:xs <- map sort (unpack (restrict cond cs)), funTypes [termType x] == [], y <- xs ]
+  printf "%d raw equations.\n\n" (length (eqs Always))
+  let univ = concat (unpack cs)
   printf "Universe has %d terms.\n" (length univ)
   putStrLn "== definitions =="
   sequence_
        [ putStrLn (show i ++ ": "++ show x ++ " := " ++ show y)
-       | (i, (_, y,x)) <- zip [1..] (definitions eqs)
+       | (i, (y,x)) <- zip [1..] (definitions (eqs Always))
        ]
   putStrLn "== equations =="
   let interesting (_, x, y) = p x || p y
-      pruned = filter interesting (prune ctx depth univ eqs)
+      conds = [ i :/= j | i <- ctx, typ i == TVar, j <- ctx, typ j == TVar, symbolType i == symbolType j ]
+      pruned = filter interesting (prune ctx depth univ (eqs Always) [ (cond, eqs cond) | cond <- conds ])
   sequence_
        [ putStrLn (show i ++ ": " ++ concat [ show x ++ "/=" ++ show y ++ " => " | x :/= y <- [cond] ] ++ show y ++ " == " ++ show x)
        | (i, (cond, y,x)) <- zip [1..] pruned
        ]
   forM_ pruned $ \(cond, y, x) -> do
-    let c = head (filter (\(x':_) -> x == x') (map members cs))
+    let c = head (filter (\(x':_) -> x == x') (map sort (unpack cs)))
         commonVars = foldr1 intersect (map vars c)
         subsumes t = sort (vars t) == sort commonVars
     when (cond == Always && not (any subsumes c)) $
          printf "*** missing term: %s = ???\n"
-                (show (mapVars (\s -> if s `elem` commonVars then s else s { name = "_" ++ name s }) x))-}
-{-
-test :: Int -> Context -> [(StdGen, Int)] -> Int -> (TypeRep -> [Term Symbol]) -> IO (Int, Classes (Term Symbol))
-test depth ctx seeds start base = do
+                (show (mapVars (\s -> if s `elem` commonVars then s else s { name = "_" ++ name s }) x))
+
+test :: Int -> Context -> [(StdGen, Int)] -> (TypeRep -> [Term Symbol]) -> IO (Classes (Term Symbol))
+test depth ctx seeds base = do
   printf "Depth %d: " depth
   let cs0 = filter (not . null) [ terms ctx base ty | ty <- allTypes ctx ]
-      conditions = [i :/= j | i <- ctx, j <- ctx, typ i == TVar, typ j == TVar, i < j, symbolType i == symbolType j]
   printf "%d terms, " (length (concat cs0))
   let evals = [ toValue . eval (memoSym ctx ctxFun) | (ctxFun, toValue) <- map useSeed seeds ]
-      (n, cs1) = refine start 50 evals (map (Class (Always:conditions)) cs0)
-      cs = map (mapClass sort) cs1
-  printf "%d classes, %d raw equations, %d tests.\n"
-         (length cs)
-         (sum (map (subtract 1 . length . members) cs))
-         (n*50)
-  return (n, cs)
--}
+      conds = map (\f -> satisfied (f . Const)) evals
+      cs1 = evaluate (take 100 (zip evals conds)) (pack cs0)
+  printf "%d classes, %d raw equations.\n"
+         (length (unpack cs1))
+         (sum (map (subtract 1 . length) (unpack cs1)))
+  return cs1
+
 memoSym :: Context -> (Symbol -> a) -> (Symbol -> a)
 memoSym ctx f = (arr !) . label
   where arr = listArray (0, length ctx - 1) (map f ctx)
 
-tests :: Int -> Context -> [(StdGen, Int)] -> Int -> IO (Int, Classes (Term Symbol))
-tests 0 _ _ _ = return (0, Classes [] [] [])
-tests (d+1) ctx vals start = do
-  (n0, cs0) <- tests d ctx vals start
-  let reps = map head (refine (extract cs0))
+-- tests :: Int -> Context -> [(StdGen, Int)] -> Int -> IO (Int, Classes (Term Symbol))
+-- tests 0 _ _ _ = return (0, Classes [] [] [])
+-- tests (d+1) ctx vals start = do
+--   (n0, cs0) <- tests d ctx vals start
+--   let reps = map head (snd (refine start 50 (extract cs0)))
+--       base ty = [ t | t <- reps, termType t == ty ]
+--   (n, cs) <- test (d+1) ctx vals start base
+--   (_, cs1) <- tests d ctx vals n
+--   return (n, cs)
+-- --  if cs0 == cs1 then return (n, cs) else tests (d+1) ctx vals n
+
+tests :: Int -> Context -> [(StdGen, Int)] -> IO (Classes (Term Symbol))
+tests 0 _ _ = return (pack [])
+tests (d+1) ctx vals = do
+  cs0 <- tests d ctx vals
+  let reps = map head (map sort (unpack cs0))
       base ty = [ t | t <- reps, termType t == ty ]
-  (n, cs) <- undefined "test (d+1) ctx vals start base"
-  (_, cs1) <- tests d ctx vals n
-  if cs0 == cs1 then return (n, cs) else tests (d+1) ctx vals n
+  test (d+1) ctx vals base
