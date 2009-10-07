@@ -183,6 +183,12 @@ condVars (a :/= b) = [a, b]
 condVars Always = []
 
 isomorphic (cond1, t1, u1) (cond2, t2, u2) =
+  isomorphic1 (cond1, t1, u1) (cond2, t2, u2) ||
+  isomorphic1 (cond1, t1, u2) (cond2, u2, t2) ||
+  isomorphic1 (flip cond1, t1, u1) (cond2, t2, u2) ||
+  isomorphic1 (flip cond1, t1, u1) (cond2, u2, t2)
+    where flip (a :/= b) = b :/= a
+isomorphic1 (cond1, t1, u1) (cond2, t2, u2) =
   let vs1 = condVars cond1 ++ vars t1 ++ vars u1
       vs2 = condVars cond2 ++ vars t2 ++ vars u2
       iso subst [] [] = True
