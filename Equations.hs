@@ -177,28 +177,10 @@ prune ctx d univ0 es ess = runCCctx ctx $ do
   univ <- loadUniv univ0
   es' <- fmap (map (\(t, u) -> (Always, t, u))) (prune1 d univ [] es)
   ess' <- mapM (\(cond, es) -> fmap (map (\(t, u) -> (cond, t, u))) (frozen (prune1 d univ (condVars cond) es))) ess
-  return (nubBy isomorphic (es' ++ concat ess'))
+  return (es' ++ concat ess')
 
 condVars (a :/= b) = [a, b]
 condVars Always = []
-
-isomorphic (cond1, t1, u1) (cond2, t2, u2) =
-  isomorphic1 (cond1, t1, u1) (cond2, t2, u2) ||
-  isomorphic1 (cond1, t1, u2) (cond2, u2, t2) ||
-  isomorphic1 (flip cond1, t1, u1) (cond2, t2, u2) ||
-  isomorphic1 (flip cond1, t1, u1) (cond2, u2, t2)
-    where flip (a :/= b) = b :/= a
-isomorphic1 (cond1, t1, u1) (cond2, t2, u2) =
-  let vs1 = condVars cond1 ++ vars t1 ++ vars u1
-      vs2 = condVars cond2 ++ vars t2 ++ vars u2
-      iso subst [] [] = True
-      iso subst (x:xs) (y:ys) = case lookup x subst of
-                                  Just y' | y == y' -> iso subst xs ys
-                                          | y /= y' -> False
-                                  Nothing -> iso ((x,y):subst) xs ys
-      iso subst _ _ = False
-  in skeleton t1 == skeleton t2 && skeleton u1 == skeleton u2 && cond1 /= Always && cond2 /= Always && iso [] vs1 vs2
-    
 
 runCCctx :: Context -> CC () a -> a
 runCCctx ctx x = runCC const const (replicate (length ctx) ()) x
@@ -277,7 +259,7 @@ laws depth ctx0 p = do
        ]
   putStrLn "== equations =="
   let interesting (_, x, y) = p x || p y
-      conds = [ i :/= j | i <- ctx, typ i == TVar, j <- ctx, typ j == TVar, symbolType i == symbolType j ]
+      conds = [ i :/= j | (i:j:_) <- partitionBy (show . symbolType) (filter (\s -> typ s == TVar) ctx) ]
       pruned = filter interesting (prune ctx depth univ (eqs Always) [ (cond, eqs cond) | cond <- conds ])
   sequence_
        [ putStrLn (show i ++ ": " ++ concat [ show x ++ "/=" ++ show y ++ " => " | x :/= y <- [cond] ] ++ show y ++ " == " ++ show x)
