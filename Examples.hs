@@ -170,7 +170,7 @@ arrays = [
  var "a" (Array undefined),
  var "i" (Index undefined),
  var "j" (Index undefined),
--- var "k" (Index undefined),
+ var "k" (Index undefined),
  con "new" (Array (replicate 16 0)),
  con "get" (\(Index ix) (Array a) -> a !! ix),
  con "set" (\(Index ix) v (Array a) -> Array [ if i == ix then v else a !! i | i <- [0..15] ]),

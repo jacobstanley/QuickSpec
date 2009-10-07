@@ -181,7 +181,7 @@ data Data where
   Data :: Classify a => a -> Data
 
 evalSym :: Gen (Symbol -> Data)
-evalSym = promote (\s -> label s `coarbitrary` range s)
+evalSym = promote (\s -> label s `variant` range s)
 
 eval :: (Symbol -> Data) -> Term Symbol -> Data
 eval ctx (Const s) = ctx s
