@@ -18,4 +18,4 @@ bools nats lists heaps arrays comp: Examples
 	zsh -i -c "bench ./Examples $@"
 
 Examples: *.hs
-	ghc --make -O2 Examples.hs
+	ghc --make -O2 Examples.hs -threaded

@@ -8,10 +8,11 @@ import Data.Array hiding (range)
 import Data.List
 import Data.Ord
 import Data.Typeable
+import qualified Data.Map as Map
 import System.IO
 import System.Random
 import Text.Printf
-import Term
+import Term hiding (evaluate)
 import CongruenceClosure
 
 -- Term generation.
@@ -49,7 +50,9 @@ terms' ctx base ty = nubSort
        , f <- ctx
        , symbolType f == mkFunTy ty' ty
        , x <- terms ctx base ty' ])
-  where nubSort = map head . partitionBy id
+
+nubSort :: Ord a => [a] -> [a]
+nubSort = map head . partitionBy id
 
 undefinedSyms :: Context -> Context
 undefinedSyms = typeNub . concatMap (makeUndefined . symbolClass) . typeNub
@@ -63,18 +66,44 @@ undefinedSyms = typeNub . concatMap (makeUndefined . symbolClass) . typeNub
 
 -- Equivalence class refinement.
 
+data Condition = Always | Symbol :/= Symbol deriving (Eq, Ord, Show)
+satisfied :: Ord a => (Symbol -> a) -> Condition -> Bool
+satisfied value (a :/= b) = value a /= value b
+satisfied value Always = True
+
+data Classes a = Classes [a] [Condition -> Bool] [[Int]]
+
+before :: Eq a => Classes a -> Classes a -> Classes a
+Classes xs ps vs `before` Classes ys ps' vs' | xs == ys = Classes xs (ps ++ ps') (vs ++ vs')
+
+evaluate :: Ord b => [(a -> b, Condition -> Bool)] -> [a] -> Classes a
+evaluate ss xs = Classes xs (map snd ss) (map (collate . fst) ss)
+  where collate f = [ Map.findWithDefault undefined v m | v <- vs ]
+          where m = Map.fromList (zip (nubSort vs) [0..])
+                vs = map f xs
+
+restrict :: Condition -> Classes a -> Classes a
+restrict c (Classes xs ps vss) = Classes xs ps' vss'
+  where (ps', vss') = unzip ss'
+        ss' = [ (p, vs) | (p, vs) <- zip ps vss, p c ]
+
+limit :: Int -> Classes a -> Classes a
+limit n (Classes xs css vss) = Classes xs (take n css) (take n vss)
+
+extract :: Classes a -> [(a, [Int])]
+extract (Classes xs _ vss) = zip xs (transpose vss)
+
+refineBy :: Int -> [[(a, [Int])]] -> [[(a, [Int])]]
+refineBy n = parRefine (map (map (id *** drop n)) . partitionBy (take n . snd))
+
 fixpoint :: Eq b => (a -> b) -> [a] -> (Int, a)
 fixpoint p xs = (id *** head) (head (filter eq (zip [0..] (tails xs))))
   where eq (_, (x:y:_)) = p x == p y
 
-refine :: Ord b => Int -> Int -> [a -> b] -> [[a]] -> (Int, [[a]])
-refine start step evals xss = ((+start) *** flatten) (fixpoint (length . flatten) (drop start (every step refines)))
-  where oneStep eval = withTrivial (parRefine (partitionBy eval))
-        refines = scanl (flip oneStep) ([], xss) evals
-        every n xs = head xs:every n (drop n xs)
-        flatten (triv, nontriv) = triv ++ nontriv
-        withTrivial f (triv, nontriv) = (triv ++ triv', nontriv')
-          where (triv', nontriv') = partition (null . drop 1) (f nontriv)
+refine :: Int -> Int -> [(a, [Int])] -> (Int, [[a]])
+refine start step xs = ((+start) *** map (map fst))
+                          (fixpoint length (iterate (refineBy step)
+                                                    (refineBy start [xs])))
 
 parRefine :: ([a] -> [[a]]) -> ([[a]] -> [[a]])
 parRefine f xs = parFlatMap (parList r0) f xs
@@ -101,15 +130,18 @@ xks         `merge` []  = xks
   | x == y    = (x, k `min` n) : (xks `merge` yns)
   | otherwise = (y,n) : (((x,k):xks) `merge` yns)
 
-consequences :: Int -> [(Int, Int, TypeRep)] -> (Term Int, Term Int) -> CC () ()
-consequences d univ (t, u) = mapM_ unify (cons1 t u `mplus` cons1 u t)
+consequences :: Int -> [(Int, Int, TypeRep)] -> [Symbol] -> (Term Int, Term Int) -> CC () ()
+consequences d univ rigid (t, u) = mapM_ unify (cons1 t u `mplus` cons1 u t)
     where unify (x, y) = do
             x' <- flatten x
             y' <- flatten y
             x' =:= y'
           cons1 t u = do
-            s <- mapM substs (varDepths d t)
-            return (subst s t, subst s u)
+            s <- mapM substs [ (v,d) | (v, d) <- varDepths d t, v `notElem` rigid ]
+            s' <- case rigid of
+                    [] -> [[]]
+                    [i, j] -> [[(i, Const (label j)), (j, Const (label i))], []]
+            return (subst (s ++ s') t, subst (s ++ s') u)
           substs (v, d) = [ (v, Const s) | (_, s, ty) <- takeWhile (\(d', _, _) -> d' <= d) univ, ty == symbolType v ]
 
 flatten (Var s) = return (label s)
@@ -123,14 +155,14 @@ killSymbols (Var s) = Var s
 killSymbols (Const s) = Const (label s)
 killSymbols (App t u) = App (killSymbols t) (killSymbols u)
 
-prune1 :: Int -> [(Int, Int, TypeRep)] -> [(Term Symbol, Term Symbol)] -> CC () [(Term Symbol, Term Symbol)]
-prune1 d univ es = fmap snd (runWriterT (mapM_ (consider univ) es))
+prune1 :: Int -> [(Int, Int, TypeRep)] -> [Symbol] -> [(Term Symbol, Term Symbol)] -> CC () [(Term Symbol, Term Symbol)]
+prune1 d univ rigid es = fmap snd (runWriterT (mapM_ (consider univ) es))
     where consider univ (t, u) = do
             b <- lift (canDerive t u)
             when (not b) $ do
               tell [(t, u)]
-              lift (consequences d univ (killSymbols t, killSymbols u))
-
+              lift (consequences d univ rigid (killSymbols t, killSymbols u))
+{-
 prune2 :: Int -> [(Int, Int, TypeRep)] -> [(Term Symbol, Term Symbol)] -> [(Term Symbol, Term Symbol)] -> CC () [(Term Symbol, Term Symbol)]
 prune2 d univ committed [] = return committed
 prune2 d univ committed ((t,u):es) = do
@@ -139,19 +171,39 @@ prune2 d univ committed ((t,u):es) = do
          canDerive t u
   if b then prune2 d univ committed es
        else prune2 d univ ((t,u):committed) es
-
+-}
 loadUniv :: [Term Symbol] -> CC a [(Int, Int, TypeRep)]
 loadUniv univ = fmap (sortBy (comparing (\(d,_,_) -> d))) (mapM f univ)
     where f t = do
             t' <- flatten (killSymbols t)
             return (depth t, t', termType t)
 
-prune :: Context -> Int -> [Term Symbol] -> [(Term Symbol, Term Symbol)] -> [(Term Symbol, Term Symbol)]
+prune :: Context -> Int -> [Term Symbol] -> [(Condition, Term Symbol, Term Symbol)] -> [(Condition, Term Symbol, Term Symbol)]
 prune ctx d univ0 es = runCCctx ctx $ do
   univ <- loadUniv univ0
-  es' <- frozen (prune1 d univ es)
+  let (esUncond0, esCond) = partition (\(cond, _, _) -> cond == Always) es
+      esUncond = map (\(_, t, u) -> (t, u)) esUncond0
+      essCond = map (\xs@((cond,_,_):_) -> (cond, map (\(_, t, u) -> (t, u)) xs)) (partitionBy (\(c1, _, _) -> c1) esCond)
+  esUncond' <- fmap (map (\(t, u) -> (Always, t, u))) (prune1 d univ [] esUncond)
+  essCond' <- mapM (\(cond, es) -> fmap (map (\(t, u) -> (cond, t, u))) (frozen (prune1 d univ (condVars cond) es))) essCond
 --  prune2 d univ [] (reverse (sort es'))
-  return es'
+--  return (esUncond' ++ concat essCond')
+  return (nubBy isomorphic (esUncond' ++ concat essCond'))
+
+condVars (a :/= b) = [a, b]
+condVars Always = []
+
+isomorphic (cond1, t1, u1) (cond2, t2, u2) =
+  let vs1 = condVars cond1 ++ vars t1 ++ vars u1
+      vs2 = condVars cond2 ++ vars t2 ++ vars u2
+      iso subst [] [] = True
+      iso subst (x:xs) (y:ys) = case lookup x subst of
+                                  Just y' | y == y' -> iso subst xs ys
+                                          | y /= y' -> False
+                                  Nothing -> iso ((x,y):subst) xs ys
+      iso subst _ _ = False
+  in skeleton t1 == skeleton t2 && skeleton u1 == skeleton u2 && cond1 /= Always && cond2 /= Always && iso [] vs1 vs2
+    
 
 runCCctx :: Context -> CC () a -> a
 runCCctx ctx x = runCC const const (replicate (length ctx) ()) x
@@ -180,7 +232,7 @@ genSeeds = do
 -- where all the xi are distinct variables, there is at least one
 -- parameter to f, and if there is an application of f inside u,
 -- then one of the xi mustn't appear in that application.
-isDefinition (u, t) = typ (fun t) == TConst && all isVar (args t) && not (null (args t)) && nub (args t) == args t && acyclic u
+isDefinition (cond, u, t) = cond == Always && typ (fun t) == TConst && all isVar (args t) && not (null (args t)) && nub (args t) == args t && acyclic u
   where isVar (Var _) = True
         isVar _ = False
         isCon (Const _) = True
@@ -195,7 +247,7 @@ isDefinition (u, t) = typ (fun t) == TConst && all isVar (args t) && not (null (
         (x:xs) `isSublistOf` (y:ys) | x == y = xs `isSublistOf` ys
                                     | otherwise = (x:xs) `isSublistOf` ys
 
-definitions es = nubBy (\(_, t) (_, t') -> fun t == fun t') (filter isDefinition es)
+definitions es = nubBy (\(_, _, t) (_, _, t') -> fun t == fun t') (filter isDefinition es)
 
 allOfThem = const True
 about xs = any (\s -> description s `elem` map Just xs) . symbols
@@ -216,58 +268,60 @@ laws depth ctx0 p = do
             ]
   seeds <- genSeeds
   putStrLn "== classes =="
-  (_, cs) <- tests depth ctx seeds 0
-  let eqs = map head
+{-  (_, cs) <- tests depth ctx seeds 0
+  return ()-}
+{-  let eqs = map head
           $ partitionBy equationOrder
-          $ [ (y,x) | (x:xs) <- cs, funTypes [termType x] == [], y <- xs ]
+          $ [ (cond,y,x) | Class conds (x:xs) <- cs, cond <- reduce conds, funTypes [termType x] == [], y <- xs ]
   printf "%d raw equations.\n\n" (length eqs)
 --  let univ = concat [allTerms depth ctx t | t <- allTypes ctx]
-  let univ = concat cs
+  let univ = concatMap members (filter (any unconditional . condition) cs)
   printf "Universe has %d terms.\n" (length univ)
   putStrLn "== definitions =="
   sequence_
        [ putStrLn (show i ++ ": "++ show x ++ " := " ++ show y)
-       | (i, (y,x)) <- zip [1..] (definitions eqs)
+       | (i, (_, y,x)) <- zip [1..] (definitions eqs)
        ]
   putStrLn "== equations =="
-  let interesting (x, y) = p x || p y
+  let interesting (_, x, y) = p x || p y
       pruned = filter interesting (prune ctx depth univ eqs)
   sequence_
-       [ putStrLn (show i ++ ": "++ show y ++ " == " ++ show x)
-       | (i, (y,x)) <- zip [1..] pruned
+       [ putStrLn (show i ++ ": " ++ concat [ show x ++ "/=" ++ show y ++ " => " | x :/= y <- [cond] ] ++ show y ++ " == " ++ show x)
+       | (i, (cond, y,x)) <- zip [1..] pruned
        ]
-  forM_ pruned $ \(y, x) -> do
-    let c = head (filter (\(x':_) -> x == x') cs)
+  forM_ pruned $ \(cond, y, x) -> do
+    let c = head (filter (\(x':_) -> x == x') (map members cs))
         commonVars = foldr1 intersect (map vars c)
         subsumes t = sort (vars t) == sort commonVars
-    when (not (any subsumes c)) $
+    when (cond == Always && not (any subsumes c)) $
          printf "*** missing term: %s = ???\n"
-                (show (mapVars (\s -> if s `elem` commonVars then s else s { name = "_" ++ name s }) x))
-
-test :: Int -> Context -> [(StdGen, Int)] -> Int -> (TypeRep -> [Term Symbol]) -> IO (Int, [[Term Symbol]])
+                (show (mapVars (\s -> if s `elem` commonVars then s else s { name = "_" ++ name s }) x))-}
+{-
+test :: Int -> Context -> [(StdGen, Int)] -> Int -> (TypeRep -> [Term Symbol]) -> IO (Int, Classes (Term Symbol))
 test depth ctx seeds start base = do
   printf "Depth %d: " depth
   let cs0 = filter (not . null) [ terms ctx base ty | ty <- allTypes ctx ]
+      conditions = [i :/= j | i <- ctx, j <- ctx, typ i == TVar, typ j == TVar, i < j, symbolType i == symbolType j]
   printf "%d terms, " (length (concat cs0))
   let evals = [ toValue . eval (memoSym ctx ctxFun) | (ctxFun, toValue) <- map useSeed seeds ]
-      (n, cs1) = refine start 50 evals cs0
-      cs = map sort cs1
+      (n, cs1) = refine start 50 evals (map (Class (Always:conditions)) cs0)
+      cs = map (mapClass sort) cs1
   printf "%d classes, %d raw equations, %d tests.\n"
          (length cs)
-         (sum (map (subtract 1 . length) cs))
+         (sum (map (subtract 1 . length . members) cs))
          (n*50)
   return (n, cs)
-
+-}
 memoSym :: Context -> (Symbol -> a) -> (Symbol -> a)
 memoSym ctx f = (arr !) . label
   where arr = listArray (0, length ctx - 1) (map f ctx)
 
-tests :: Int -> Context -> [(StdGen, Int)] -> Int -> IO (Int, [[Term Symbol]])
-tests 0 _ _ _ = return (0, [])
+tests :: Int -> Context -> [(StdGen, Int)] -> Int -> IO (Int, Classes (Term Symbol))
+tests 0 _ _ _ = return (0, Classes [] [] [])
 tests (d+1) ctx vals start = do
   (n0, cs0) <- tests d ctx vals start
-  let reps = map head cs0
+  let reps = map head (refine (extract cs0))
       base ty = [ t | t <- reps, termType t == ty ]
-  (n, cs) <- test (d+1) ctx vals start base
+  (n, cs) <- undefined "test (d+1) ctx vals start base"
   (_, cs1) <- tests d ctx vals n
   if cs0 == cs1 then return (n, cs) else tests (d+1) ctx vals n
