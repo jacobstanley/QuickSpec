@@ -47,6 +47,11 @@ con name impl = Symbol { name = name, label = undefined, description = Nothing, 
 
 data Term c = Const c | Var Symbol | App (Term c) (Term c) deriving (Typeable, Eq)
 
+atomicTerm :: Symbol -> Term Symbol
+atomicTerm s = case typ s of
+                 TVar -> Var s
+                 TConst -> Const s
+
 depth, size, numVars :: Term c -> Int
 depth (App s t) = depth s `max` (1 + depth t)
 depth _ = 1

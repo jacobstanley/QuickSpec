@@ -20,37 +20,6 @@ import CongruenceClosure
 type Context = [Symbol]
 type Universe = TypeRep -> [Term Symbol]
 
-terms :: Context -> Universe -> Universe
-terms ctx base ty =
-     [ sym elt
-     | elt <- ctx
-     , symbolType elt == ty
-     , let sym = case typ elt of
-                   TVar -> Var
-                   TConst -> Const
-     ]
-  ++ [ App f x
-     | ty' <- argTypes ctx ty
-     , x  <- base ty'
-     , not (termIsUndefined x)
-     , f  <- terms ctx base (mkFunTy ty' ty)
-     , not (termIsUndefined f)
-     ]
-
-argTypes ctx ty = [ ty1 | (ty1, ty2) <- funTypes (allTypes ctx),
-                          ty2 == ty ]
-termIsUndefined (Const s) = isUndefined s
-termIsUndefined _ = False
-
-terms' :: Context -> Universe -> Universe
-terms' ctx base ty = nubSort
-     (terms ctx base ty ++
-       [ App (Const f) x
-       | ty' <- argTypes ctx ty
-       , f <- ctx
-       , symbolType f == mkFunTy ty' ty
-       , x <- terms ctx base ty' ])
-
 nubSort :: Ord a => [a] -> [a]
 nubSort = map head . partitionBy id
 
@@ -245,7 +214,7 @@ laws depth ctx0 p = do
             ]
   seeds <- genSeeds
   putStrLn "== classes =="
-  cs <- tests depth ctx seeds
+  cs <- test depth ctx seeds (\ty -> take 1 (sort [ Var s | s <- ctx, typ s == TVar, symbolType s == ty ]))
   let eqs cond = map head
                $ partitionBy equationOrder
                $ [ (y,x) | x:xs <- map sort (unpack (restrict cond cs)), funTypes [termType x] == [], y <- xs ]
@@ -276,7 +245,7 @@ laws depth ctx0 p = do
 test :: Int -> Context -> [(StdGen, Int)] -> (TypeRep -> [Term Symbol]) -> IO (Classes (Term Symbol))
 test depth ctx seeds base = do
   printf "Depth %d: " depth
-  let cs0 = filter (not . null) [ terms ctx base ty | ty <- allTypes ctx ]
+  let cs0 = filter (not . null) [ terms depth ctx base ty | ty <- allTypes ctx ]
   printf "%d terms, " (length (concat cs0))
   let evals = [ toValue . eval (memoSym ctx ctxFun) | (ctxFun, toValue) <- map useSeed seeds ]
       conds = map (\f -> satisfied (f . Const)) evals
@@ -284,27 +253,12 @@ test depth ctx seeds base = do
   printf "%d classes, %d raw equations.\n"
          (length (unpack cs1))
          (sum (map (subtract 1 . length) (unpack cs1)))
-  return cs1
+  if nubSort (concat [ base ty | ty <- allTypes ctx ]) == nubSort (map head (unpack cs1))
+   then return cs1
+   else test depth ctx seeds (\ty -> [ t | t <- map head (unpack cs1), termType t == ty ])
+
+terms depth ctx base ty = undefined
 
 memoSym :: Context -> (Symbol -> a) -> (Symbol -> a)
 memoSym ctx f = (arr !) . label
   where arr = listArray (0, length ctx - 1) (map f ctx)
-
--- tests :: Int -> Context -> [(StdGen, Int)] -> Int -> IO (Int, Classes (Term Symbol))
--- tests 0 _ _ _ = return (0, Classes [] [] [])
--- tests (d+1) ctx vals start = do
---   (n0, cs0) <- tests d ctx vals start
---   let reps = map head (snd (refine start 50 (extract cs0)))
---       base ty = [ t | t <- reps, termType t == ty ]
---   (n, cs) <- test (d+1) ctx vals start base
---   (_, cs1) <- tests d ctx vals n
---   return (n, cs)
--- --  if cs0 == cs1 then return (n, cs) else tests (d+1) ctx vals n
-
-tests :: Int -> Context -> [(StdGen, Int)] -> IO (Classes (Term Symbol))
-tests 0 _ _ = return (pack [])
-tests (d+1) ctx vals = do
-  cs0 <- tests d ctx vals
-  let reps = map head (map sort (unpack cs0))
-      base ty = [ t | t <- reps, termType t == ty ]
-  test (d+1) ctx vals base
