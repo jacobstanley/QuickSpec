@@ -20,14 +20,14 @@ insert2 k1 k2 v m = IntMap.insertWith IntMap.union k1 (IntMap.singleton k2 v) m
 delete2 :: Int -> Int -> IntMap (IntMap a) -> IntMap (IntMap a)
 delete2 k1 k2 m = IntMap.adjust (IntMap.delete k2) k1 m
 
-data FlatEqn = (Int, Int) := Int deriving (Eq, Ord, Show)
+data FlatEqn = (Int, Int) := Int deriving (Eq, Ord)
 
 data S a = S {
       funUse :: !(IntMap [(Int, Int)]),
       argUse :: !(IntMap [(Int, Int)]),
       lookup :: IntMap (IntMap Int),
       app :: a -> a -> a
-    } deriving Show
+    }
 
 type CC a = StateT (S a) (UF a)
 

@@ -1,7 +1,6 @@
 module UnionFind(UF, Replacement((:>)), newSym, (=:=), rep, reps, runUF, S) where
 
 import Prelude hiding (min)
-import Text.Show.Functions
 import Control.Monad.State.Strict
 import Data.IntMap(IntMap)
 import qualified Data.IntMap as IntMap
@@ -11,7 +10,7 @@ data S a = S {
       repSet :: IntMap a,
       sym :: Int,
       min :: a -> a -> a
-    } deriving Show
+    }
 
 type UF a = State (S a)
 data Replacement = Int :> Int
