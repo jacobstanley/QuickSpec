@@ -181,7 +181,11 @@ data Data where
   Data :: Classify a => a -> Data
 
 evalSym :: Gen (Symbol -> Data)
-evalSym = promote (\s -> label s `variant` range s)
+evalSym = promote (\s -> label s `unaryVariant` range s)
+  where unaryVariant :: Int -> Gen a -> Gen a
+        unaryVariant n (MkGen f) = MkGen (\r s -> f (unarySplit n r) s)
+        unarySplit 0 = fst . split
+        unarySplit (n+1) = snd . split . unarySplit n
 
 eval :: (Symbol -> Data) -> Term Symbol -> Data
 eval ctx (Const s) = ctx s
