@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables,DeriveDataTypeable,TypeFamilies,GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ScopedTypeVariables,DeriveDataTypeable,TypeFamilies,GeneralizedNewtypeDeriving,TypeSynonymInstances,StandaloneDeriving #-}
 
 module Main where
 
@@ -11,6 +11,7 @@ import Test.QuickCheck
 import System
 import System.Random
 import Control.Monad
+import Control.Monad.State
 
 bools = describe "bools" [
  var "x" False,
@@ -142,7 +143,8 @@ examples = [
  ("lists", (base ++ bools ++ lists, about ["lists"])),
  ("heaps", (base ++ bools ++ lists ++ heaps, about ["heaps"])),
  ("arrays", (base ++ arrays, allOfThem)),
- ("comp", (base ++ comp, allOfThem))
+ ("comp", (base ++ comp, allOfThem)),
+ ("queues", (base ++ queues ++ bools, about ["queues"]))
  ]
 
 main = do
@@ -183,3 +185,77 @@ comp = [
  var "h" (undefined :: (Int -> Int)),
  con "." (\f g x -> f (g (x :: Int) :: Int) :: Int),
  con "id" (id :: Int -> Int)]
+
+data Queue = Queue [Int] [Int] deriving Typeable
+
+instance Eq Queue where
+  q1 == q2 = q1 `compare` q2 == EQ
+
+instance Ord Queue where
+  compare = comparing listQ
+
+instance Arbitrary Queue where
+  arbitrary = liftM2 Queue arbitrary arbitrary
+
+deriving instance Typeable2 State
+
+listQ (Queue xs ys) = xs ++ reverse ys
+
+new = Queue [] []
+nullQ (Queue [] []) = True
+nullQ _ = False
+
+inl x (Queue xs ys) = Queue (x:xs) ys
+inr y (Queue xs ys) = Queue xs (y:ys)
+outl = withLeft (\(x:xs) ys -> Queue xs ys)
+outr = withRight (\xs (y:ys) -> Queue xs ys)
+peekl = withLeft (\(x:xs) ys -> x)
+peekr = withRight (\xs (y:ys) -> y)
+withLeft f (Queue [] ys) = f (reverse ys) []
+withLeft f (Queue xs ys) = f xs ys
+withRight f (Queue xs []) = f [] (reverse xs)
+withRight f (Queue xs ys) = f xs ys
+
+type QueueM a = State Queue a
+
+instance Classify a => Classify (QueueM a) where
+  type Value (QueueM a) = (Value a, Queue)
+  evaluate m = do
+    q <- arbitrary
+    let (x, q') = runState m q
+    x' <- evaluate x
+    return (x', q')
+
+instance Classify () where
+  type Value () = ()
+  evaluate = return
+
+newM :: QueueM ()
+newM = put new
+
+nullM :: QueueM Bool
+nullM = gets nullQ
+
+inlM, inrM :: Int -> QueueM ()
+inlM x = modify (inl x)
+inrM x = modify (inr x)
+
+outlM, outrM :: QueueM ()
+outlM = modify outl
+outrM = modify outr
+
+peeklM, peekrM :: QueueM Int
+peeklM = gets peekl
+peekrM = gets peekr
+
+queues = describe "queues" [
+ con "new" newM,
+ con "null" nullM,
+ con "inl" inlM,
+ con "inr" inrM,
+ con "outl" outlM,
+ con "outr" outrM,
+ con "peekl" peeklM,
+ con "peekr" peekrM,
+ con "()" ()
+ ]
