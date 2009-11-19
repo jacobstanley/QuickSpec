@@ -18,4 +18,7 @@ bools nats lists heaps arrays comp queues: Examples
 	zsh -i -c "bench ./Examples $@"
 
 Examples: *.hs
-	ghc --make -O2 Examples.hs -threaded
+	ghc --make -O2 Examples.hs -threaded -ignore-package monads-fd
+
+clean:
+	rm -f Examples *.hi *.o
