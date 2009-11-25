@@ -303,8 +303,8 @@ memoSym ctx f = (arr !) . label
 
 tests :: Int -> Context -> [(StdGen, Int)] -> IO (Classes (Term Symbol))
 tests 0 _ _ = return (pack [])
-tests (d+1) ctx vals = do
-  cs0 <- tests d ctx vals
+tests d ctx vals = do
+  cs0 <- tests (d-1) ctx vals
   let reps = map head (map sort (unpack cs0))
       base ty = [ t | t <- reps, termType t == ty ]
-  test (d+1) ctx vals base
+  test d ctx vals base
