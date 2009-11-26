@@ -12,6 +12,7 @@ import System
 import System.Random
 import Control.Monad
 import Control.Monad.State
+import PrettyPrinting
 
 bools = describe "bools" [
  var "x" False,
@@ -131,7 +132,7 @@ heaps = describe "heaps" [
 
 nats = describe "nats" [
  con "+" ((+) :: Int -> Int -> Int),
- con "-" ((-) :: Int -> Int -> Int),
+-- con "-" ((-) :: Int -> Int -> Int),
  con "*" ((*) :: Int -> Int -> Int),
  con "neg" (negate :: Int -> Int),
  con "0" (0 :: Int),
@@ -144,7 +145,8 @@ examples = [
  ("heaps", (base ++ bools ++ lists ++ heaps, about ["heaps"])),
  ("arrays", (base ++ arrays, allOfThem)),
  ("comp", (base ++ comp, allOfThem)),
- ("queues", (base ++ queues ++ bools, about ["queues"]))
+ ("queues", (base ++ queues ++ bools, about ["queues"])),
+ ("pretty", (base ++ nats ++ pretty, about ["pretty"]))
  ]
 
 main = do
