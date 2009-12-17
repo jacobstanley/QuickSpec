@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables,DeriveDataTypeable,TypeFamilies,GeneralizedNewtypeDeriving,TypeSynonymInstances,StandaloneDeriving #-}
+{-# LANGUAGE ScopedTypeVariables,DeriveDataTypeable,TypeFamilies,GeneralizedNewtypeDeriving,TypeSynonymInstances,StandaloneDeriving,FlexibleInstances #-}
 
 module Main where
 
@@ -13,6 +13,7 @@ import System.Random
 import Control.Monad
 import Control.Monad.State
 import PrettyPrinting
+import Regex hiding (State)
 
 bools = describe "bools" [
  var "x" False,
@@ -146,8 +147,37 @@ examples = [
  ("arrays", (base ++ arrays, allOfThem)),
  ("comp", (base ++ comp, allOfThem)),
  ("queues", (base ++ queues ++ bools, about ["queues"])),
- ("pretty", (base ++ nats ++ pretty, about ["pretty"]))
+ ("pretty", (base ++ nats ++ pretty, about ["pretty"])),
+ ("regex", (regex, allOfThem))
  ]
+
+regex = [
+ var "x" True,
+ var "y" True,
+ var "z" True,
+ var "r" (Char True),
+ var "s" (Char True),
+ var "t" (Char True),
+ con "char" (Char :: Bool -> Regex Bool),
+ con "any" (AnyChar :: Regex Bool),
+ con "empty" (Epsilon :: Regex Bool),
+ con "zero" (Zero :: Regex Bool),
+ con "concat" (Concat :: Regex Bool -> Regex Bool -> Regex Bool),
+ con "choice" (Choice :: Regex Bool -> Regex Bool -> Regex Bool),
+ con "star" (star :: Regex Bool -> Regex Bool) ]
+
+instance Arbitrary (Regex Bool) where
+  arbitrary = sized arb
+    where arb 0 = oneof [fmap Char arbitrary, return AnyChar, return Epsilon, return Zero]
+          arb n = oneof [fmap Char arbitrary, return AnyChar, return Epsilon, return Zero,
+                         liftM2 Concat arb' arb', liftM2 Choice arb' arb', fmap Plus (arb (n-1))]
+            where arb' = arb (n `div` 2)
+
+instance Classify (Regex Bool) where
+  type Value (Regex Bool) = Bool
+  evaluate r = do
+    s <- arbitrary
+    return (run (compile r) s)
 
 main = do
   args <- getArgs
