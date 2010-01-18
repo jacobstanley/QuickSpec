@@ -1,59 +1,47 @@
-module UnionFind(UF, Replacement((:>)), newSym, (=:=), rep, reps, runUF, S) where
+module UnionFind(UF, Replacement((:>)), newSym, (=:=), rep, runUF, S) where
 
 import Prelude hiding (min)
 import Control.Monad.State.Strict
 import Data.IntMap(IntMap)
 import qualified Data.IntMap as IntMap
 
-data S a = S {
+data S = S {
       links :: IntMap Int,
-      repSet :: IntMap a,
-      sym :: Int,
-      min :: a -> a -> a
+      sym :: Int
     }
 
-type UF a = State (S a)
+type UF = State S
 data Replacement = Int :> Int
 
-runUF :: (s -> s -> s) -> [s] -> UF s a -> a
-runUF min syms m = fst (runState (zipWithM_ insertRep [0..] syms >> m) (S IntMap.empty IntMap.empty (length syms) min))
+runUF :: Int -> UF a -> a
+runUF numSyms m = fst (runState m (S IntMap.empty numSyms))
 
 modifyLinks f = modify (\s -> s { links = f (links s) })
-modifyReps f = modify (\s -> s { repSet = f (repSet s) })
 modifySym f = modify (\s -> s { sym = f (sym s) })
 putLinks l = modifyLinks (const l)
 
-newSym :: a -> UF a Int
-newSym v = do
+newSym :: UF Int
+newSym = do
   s <- get
-  insertRep (sym s) v
   modifySym (+1)
   return (sym s)
 
-insertRep s v = modifyReps (IntMap.insert s v)
-
-(=:=) :: Int -> Int -> UF s (Maybe Replacement)
+(=:=) :: Int -> Int -> UF (Maybe Replacement)
 s =:= t | s == t = return Nothing
 s =:= t = do
-  (rs, vs) <- rep s
-  (rt, vt) <- rep t
+  rs <- rep s
+  rt <- rep t
   if (rs /= rt) then do
-    min_ <- fmap min get
     modifyLinks (IntMap.insert rs rt)
-    modifyReps (IntMap.delete rs)
-    modifyReps (IntMap.insert rt (vs `min_` vt))
     return (Just (rs :> rt))
    else return Nothing
 
-rep :: Int -> UF s (Int, s)
+rep :: Int -> UF Int
 rep t = do
   m <- fmap links get
   case IntMap.lookup t m of
-    Nothing -> fmap (\s -> (t, IntMap.findWithDefault undefined t (repSet s))) get
+    Nothing -> return t
     Just t' -> do
-      (r, v) <- rep t'
+      r <- rep t'
       when (t' /= r) $ putLinks (IntMap.insert t r m)
-      return (r, v)
-
-reps :: UF s (IntMap s)
-reps = fmap repSet get
+      return r

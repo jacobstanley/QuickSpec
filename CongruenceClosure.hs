@@ -1,6 +1,6 @@
 -- Based on the paper "Proof-producing Congruence Closure".
 
-module CongruenceClosure(CC, newSym, (=:=), (=?=), rep, reps, runCC, ($$), S, frozen) where
+module CongruenceClosure(CC, newSym, (=:=), (=?=), rep, runCC, ($$), S, frozen) where
 
 import Prelude hiding (lookup)
 import Control.Monad.State.Strict
@@ -22,14 +22,13 @@ delete2 k1 k2 m = IntMap.adjust (IntMap.delete k2) k1 m
 
 data FlatEqn = (Int, Int) := Int deriving (Eq, Ord)
 
-data S a = S {
+data S = S {
       funUse :: !(IntMap [(Int, Int)]),
       argUse :: !(IntMap [(Int, Int)]),
-      lookup :: IntMap (IntMap Int),
-      app :: a -> a -> a
+      lookup :: IntMap (IntMap Int)
     }
 
-type CC a = StateT (S a) (UF a)
+type CC = StateT S UF
 
 modifyFunUse f = modify (\s -> s { funUse = f (funUse s) })
 modifyArgUse f = modify (\s -> s { argUse = f (argUse s) })
@@ -38,31 +37,27 @@ addArgUses xs s = modifyArgUse (IntMap.insertWith (++) s xs)
 modifyLookup f = modify (\s -> s { lookup = f (lookup s) })
 putLookup l = modifyLookup (const l)
 
-newSym :: a -> CC a Int
-newSym x = lift (UF.newSym x)
+newSym :: CC Int
+newSym = lift UF.newSym
 
-($$) :: Int -> Int -> CC a Int
+($$) :: Int -> Int -> CC Int
 f $$ x = do
   m <- gets lookup
-  a <- gets app
-  (f', fv) <- rep f
-  (x', xv) <- rep x
+  f' <- rep f
+  x' <- rep x
   case lookup2 x' f' m of
     Nothing -> do
-      c <- newSym (fv `a` xv)
+      c <- newSym
       putLookup (insert2 x' f' c m)
       addFunUses [(x', c)] f'
       addArgUses [(f', c)] x'
       return c
     Just k -> return k
 
-(=:=) :: Int -> Int -> CC a Bool
+(=:=) :: Int -> Int -> CC Bool
 a =:= b = propagate (a, b)
 
-t =?= u = do
-  (r1, _) <- rep t
-  (r2, _) <- rep u
-  return (r1 == r2)
+t =?= u = liftM2 (==) (rep t) (rep u)
 
 propagate (a, b) = do
   (unified, pending) <- propagate1 (a, b)
@@ -86,7 +81,7 @@ updateUses r r' funUses argUses = do
   modifyLookup (IntMap.delete r)
   forM_ funUses $ \(x, c) -> modifyLookup (delete2 x r)
   let repPair (x, c) = do
-        (x', _) <- rep x
+        x' <- rep x
         return (x', c)
   funUses' <- mapM repPair funUses
   argUses' <- mapM repPair argUses
@@ -115,12 +110,10 @@ updateUses r r' funUses argUses = do
 
   return pending
 
-rep :: Int -> CC a (Int, a)
+rep :: Int -> CC Int
 rep s = lift (UF.rep s)
-reps :: CC a (IntMap a)
-reps = lift UF.reps
 
-frozen :: CC s a -> CC s a
+frozen :: CC a -> CC a
 frozen x = do
   s <- get
   s' <- lift get
@@ -129,5 +122,5 @@ frozen x = do
   lift (put s')
   return r
 
-runCC :: (s -> s -> s) -> (s -> s -> s) -> [s] -> CC s a -> a
-runCC app min syms m = UF.runUF min syms (evalStateT m (S IntMap.empty IntMap.empty IntMap.empty app))
+runCC :: Int -> CC a -> a
+runCC numSyms m = UF.runUF numSyms (evalStateT m (S IntMap.empty IntMap.empty IntMap.empty))

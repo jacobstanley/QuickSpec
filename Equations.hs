@@ -124,7 +124,7 @@ xks         `merge` []  = xks
   | x == y    = (x, k `min` n) : (xks `merge` yns)
   | otherwise = (y,n) : (((x,k):xks) `merge` yns)
 
-consequences :: Int -> [(Int, Int, TypeRep)] -> [Symbol] -> (Term Int, Term Int) -> CC () ()
+consequences :: Int -> [(Int, Int, TypeRep)] -> [Symbol] -> (Term Int, Term Int) -> CC ()
 consequences d univ rigid (t, u) = mapM_ unify (cons1 t u `mplus` cons1 u t)
     where unify (x, y) = do
             x' <- flatten x
@@ -149,7 +149,7 @@ killSymbols (Var s) = Var s
 killSymbols (Const s) = Const (label s)
 killSymbols (App t u) = App (killSymbols t) (killSymbols u)
 
-prune1 :: Int -> [(Int, Int, TypeRep)] -> [Symbol] -> [(Term Symbol, Term Symbol)] -> CC () [(Term Symbol, Term Symbol)]
+prune1 :: Int -> [(Int, Int, TypeRep)] -> [Symbol] -> [(Term Symbol, Term Symbol)] -> CC [(Term Symbol, Term Symbol)]
 prune1 d univ rigid es = fmap snd (runWriterT (mapM_ (consider univ) es))
     where consider univ (t, u) = do
             b <- lift (canDerive t u)
@@ -166,7 +166,7 @@ prune2 d univ committed ((t,u):es) = do
   if b then prune2 d univ committed es
        else prune2 d univ ((t,u):committed) es
 -}
-loadUniv :: [Term Symbol] -> CC a [(Int, Int, TypeRep)]
+loadUniv :: [Term Symbol] -> CC [(Int, Int, TypeRep)]
 loadUniv univ = fmap (sortBy (comparing (\(d,_,_) -> d))) (mapM f univ)
     where f t = do
             t' <- flatten (killSymbols t)
@@ -182,10 +182,10 @@ prune ctx d univ0 es ess = runCCctx ctx $ do
 condVars (a :/= b) = [a, b]
 condVars Always = []
 
-runCCctx :: Context -> CC () a -> a
-runCCctx ctx x = runCC const const (replicate (length ctx) ()) x
+runCCctx :: Context -> CC a -> a
+runCCctx ctx x = runCC (length ctx) x
 
-canDerive :: Term Symbol -> Term Symbol -> CC () Bool
+canDerive :: Term Symbol -> Term Symbol -> CC Bool
 canDerive t u = do
   t' <- flatten (killSymbols t)
   u' <- flatten (killSymbols u)
