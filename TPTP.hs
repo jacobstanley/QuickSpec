@@ -1,13 +1,19 @@
+{-# LANGUAGE ScopedTypeVariables,EmptyDataDecls,TypeFamilies,DeriveDataTypeable #-}
 import Codec.TPTP.Base hiding (formula, Var, Formula, Term)
 import qualified Codec.TPTP.Base as TPTP
 import Codec.TPTP.Import
 import Control.Arrow
 import Control.Monad
 import Control.Monad.Identity
-import Data.List
+import Data.List hiding (find)
+import Data.Maybe
 import Data.Monoid hiding (All)
+import Data.Typeable
 import System
 import System.IO
+import Test.QuickCheck
+import qualified Term
+import Equations
 
 -- Parsing
 
@@ -74,17 +80,62 @@ convertTerm (T (Identity (FunApp (AtomicWord f) xs))) = App f (map convertTerm x
 convertTerm (T (Identity (TPTP.Var (V x)))) = Var x
 convertTerm _ = error "strange term"
 
--- Functions on problems
+-- Functions on problems, converting terms to QuickSpec terms
+
+formulae :: Problem -> [Formula]
+formulae (Problem axioms conjectures) = axioms ++ conjectures
 
 numVars :: Problem -> Int
-numVars (Problem axioms conjectures) = maximum (map (length . vars) (axioms ++ conjectures))
+numVars = maximum . map (length . vars) . formulae
 
-symbols :: Problem -> [String]
-symbols (Problem axioms conjectures) = usort (concat (map formSyms (axioms ++ conjectures)))
+symbols :: Problem -> [(String, Int)]
+symbols = usort . concatMap formSyms . formulae
   where formSyms (Formula _ t u) = termSyms t ++ termSyms u
         termSyms (Var _) = []
-        termSyms (App f ts) = f:concatMap termSyms ts
+        termSyms (App f ts) = (f, length ts):concatMap termSyms ts
         usort = map head . group . sort
+
+data Void deriving (Typeable)
+instance Eq Void where
+  _==_ = undefined
+instance Ord Void where
+  _<=_ = undefined
+instance Arbitrary Void where
+  arbitrary = return undefined
+instance Term.Classify Void where
+  type Term.Value Void = Void
+  evaluate = return
+
+range :: Int -> Term.Data
+range 0 = Term.Data (undefined :: Void)
+range (n+1) = case range n of
+                Term.Data x -> Term.Data (\(_ :: Void) -> x)
+
+symbol :: Term.SymbolType -> (String, Int) -> Term.Symbol
+symbol typ (name, arity) = Term.Symbol name Nothing undefined False typ (return (range arity))
+
+context :: Problem -> Context
+context prob = zipWith Term.relabel [0..] ctx
+  where ctx = map (symbol Term.TConst) (symbols prob) ++
+              [ symbol Term.TVar (v, 0) | v <- varNames ]
+        varNames = head [ vars f | f <- formulae prob, length (vars f) == numVars prob ]
+
+toQuickSpec :: Context -> [String] -> Term -> Term.Term Term.Symbol
+toQuickSpec ctx vars (Var v) = Term.Var sym
+  where sym = [ s | s <- ctx, Term.typ s == Term.TVar ] !!
+                fromJust (elemIndex v vars)
+toQuickSpec ctx vars (App f ts) = foldl Term.App (Term.Const sym)
+                                            (map (toQuickSpec ctx vars) ts)
+  where sym = head [ s | s <- ctx, Term.typ s == Term.TConst,
+                     Term.name s == f,
+                     arity (Term.symbolType s) == length ts ]
+
+arity :: TypeRep -> Int
+arity ty = case Term.funTypes [ty] of
+             [] -> 0
+             [(_, rhs)] -> 1+arity rhs
+
+-- Main program
 
 defaultPath = "/home/nick/TPTP-v4.0.1"
 
