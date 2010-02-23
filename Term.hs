@@ -45,6 +45,11 @@ var name _ = Symbol { name = name, label = undefined, description = Nothing, isU
 con :: Classify a => String -> a -> Symbol
 con name impl = Symbol { name = name, label = undefined, description = Nothing, isUndefined = False, typ = TConst, range = fmap Data (return impl) }
 
+sym :: Symbol -> Term Symbol
+sym elt = case typ elt of
+            TVar -> Var elt
+            TConst -> Const elt
+
 data Term c = Const c | Var Symbol | App (Term c) (Term c) deriving (Typeable, Eq)
 
 depth, size, numVars :: Term c -> Int

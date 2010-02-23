@@ -45,7 +45,7 @@ parseWithIncludes dir file = parseFile file >>= fmap concat . mapM parseIncludes
 
 -- Problem representation
 
-data Problem = Problem { axioms :: [Formula], conjectures :: [Formula] } deriving Show
+data Problem = Problem { positive :: [Formula], negative :: [Formula] } deriving Show
 data Formula = Formula { vars :: [String], left :: Term, right :: Term } deriving Show
 data Term = Var String | App String [Term] deriving Show
 
@@ -87,7 +87,7 @@ convertTerm _ = error "strange term"
 -- Functions on problems, converting terms to QuickSpec terms
 
 formulae :: Problem -> [Formula]
-formulae (Problem axioms conjectures) = axioms ++ conjectures
+formulae (Problem positive negative) = positive ++ negative
 
 numVars :: Problem -> Int
 numVars = maximum . map (length . vars) . formulae
@@ -97,7 +97,9 @@ symbols = usort . concatMap formSyms . formulae
   where formSyms (Formula _ t u) = termSyms t ++ termSyms u
         termSyms (Var _) = []
         termSyms (App f ts) = (f, length ts):concatMap termSyms ts
-        usort = map head . group . sort
+
+usort :: Ord a => [a] -> [a]
+usort = map head . group . sort
 
 data Void deriving (Typeable)
 instance Eq Void where
@@ -141,11 +143,12 @@ arity ty = case Term.funTypes [ty] of
 
 -- Term generation and pruning.
 
-load :: Context -> Int -> [Formula] -> [Term.Term Term.Symbol] -> CC ()
+load :: Context -> Int -> [Formula] -> [Term.Term Term.Symbol] -> CC [(Int, Int, TypeRep)]
 load ctx d fs univ = do
   univ' <- loadUniv univ
   forM_ fs $ \f ->
-    consequences d univ' [] (convert f (left f), convert f (right f))
+    mapM_ unify (consequences d univ' [] (convert f (left f), convert f (right f)))
+  return univ'
       where convert f t = killSymbols (toQuickSpec ctx (vars f) t)
 
 allTerms :: Ord a => Context -> Int -> (Term.Term Term.Symbol -> a) -> [Term.Term Term.Symbol]
@@ -155,13 +158,28 @@ allTerms ctx (d+1) rep = sort (concat [ terms ctx base ty | ty <- Term.allTypes 
         pruned = map (head . sort) (partitionBy rep (allTerms ctx d rep))
 
 check :: Int -> Problem -> Bool
-check d prob = and $ runCC (length ctx) $ trace (show (length univ)) $ do
-                 load ctx d (axioms prob) univ
-                 forM (conjectures prob) $ \f ->
-                   canDerive (toQuickSpec ctx (vars f) (left f))
-                             (toQuickSpec ctx (vars f) (right f))
-  where ctx = context prob
-        univ = allTerms ctx d id
+check d prob = or $ runCC (length ctx) $ trace (show (length univ)) $ do
+                 univ' <- load ctx d (positive prob) univ
+                 forM (negative prob) $ \f -> do
+                   let t = killSymbols (toQuickSpec ctx (vars f) (left f))
+                       u = killSymbols (toQuickSpec ctx (vars f) (right f))
+                   orM [ do t'' <- flatten t'
+                            u'' <- flatten u'
+                            t'' =?= u'' | (t', u') <- consequences d univ' [] (t, u) ]
+  where orM [] = return False
+        orM (x:xs) = do
+          b <- x
+          if b then return True else orM xs
+        ctx = context prob
+        univ = usort (allTerms ctx d id ++ extraTerms)
+        extraTerms = do
+          f <- formulae prob
+          t <- termsOf f
+          t' <- Term.subterms t
+          s <- mapM substs [ s | s <- ctx, Term.typ s == Term.TVar ]
+          return (subst s t')
+        termsOf f = map (toQuickSpec ctx (vars f)) [left f, right f]
+        substs v = [ (v, Term.sym s) | s <- ctx, Term.typ s == Term.typ v ]
 
 -- Main program
 

@@ -25,9 +25,6 @@ terms ctx base ty =
      [ sym elt
      | elt <- ctx
      , symbolType elt == ty
-     , let sym = case typ elt of
-                   TVar -> Var
-                   TConst -> Const
      ]
   ++ [ App f x
      | ty' <- argTypes ctx ty
@@ -124,19 +121,20 @@ xks         `merge` []  = xks
   | x == y    = (x, k `min` n) : (xks `merge` yns)
   | otherwise = (y,n) : (((x,k):xks) `merge` yns)
 
-consequences :: Int -> [(Int, Int, TypeRep)] -> [Symbol] -> (Term Int, Term Int) -> CC ()
-consequences d univ rigid (t, u) = mapM_ unify (cons1 t u `mplus` cons1 u t)
-    where unify (x, y) = do
-            x' <- flatten x
-            y' <- flatten y
-            x' =:= y'
-          cons1 t u = do
+consequences :: Int -> [(Int, Int, TypeRep)] -> [Symbol] -> (Term Int, Term Int) -> [(Term Int, Term Int)]
+consequences d univ rigid (t, u) = cons1 t u `mplus` cons1 u t
+    where cons1 t u = do
             s <- mapM substs [ (v,d) | (v, d) <- varDepths d t, v `notElem` rigid ]
             s' <- case rigid of
                     [] -> [[]]
                     [i, j] -> [[(i, Const (label j)), (j, Const (label i))], []]
             return (subst (s ++ s') t, subst (s ++ s') u)
           substs (v, d) = [ (v, Const s) | (_, s, ty) <- takeWhile (\(d', _, _) -> d' <= d) univ, ty == symbolType v ]
+
+unify (x, y) = do
+  x' <- flatten x
+  y' <- flatten y
+  x' =:= y'
 
 flatten (Var s) = return (label s)
 flatten (Const s) = return s
@@ -155,7 +153,7 @@ prune1 d univ rigid es = fmap snd (runWriterT (mapM_ (consider univ) es))
             b <- lift (canDerive t u)
             when (not b) $ do
               tell [(t, u)]
-              lift (consequences d univ rigid (killSymbols t, killSymbols u))
+              lift (mapM_ unify (consequences d univ rigid (killSymbols t, killSymbols u)))
 {-
 prune2 :: Int -> [(Int, Int, TypeRep)] -> [(Term Symbol, Term Symbol)] -> [(Term Symbol, Term Symbol)] -> CC () [(Term Symbol, Term Symbol)]
 prune2 d univ committed [] = return committed
