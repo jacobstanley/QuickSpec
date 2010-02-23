@@ -172,9 +172,6 @@ check d prob = and $ runCC (length ctx) $ do
 
 defaultPath = "/home/nick/TPTP-v4.0.1"
 
-problemList :: IO [FilePath]
-problemList = fmap words (readFile "ueq-problems")
-
 test :: FilePath -> IO ()
 test file = parseProblem defaultPath file >>= print . convert
 
@@ -182,8 +179,11 @@ main = do
   hSetBuffering stdout NoBuffering
   let withDefault _ [x] = x
       withDefault x [] = x
-  path <- fmap (withDefault defaultPath) getArgs
-  problems <- problemList
-  forM problems $ \name -> do
-         prob <- fmap (convert . checkKind) (parseProblem path name)
-         print (check 3 prob)
+  args <- getArgs
+  case args of
+    [name] -> solve defaultPath name
+    [path, name] -> solve path name
+
+solve path name = do
+  prob <- fmap (convert . checkKind) (parseProblem path name)
+  putStrLn (if check 3 prob then "Provable" else "Unprovable")
