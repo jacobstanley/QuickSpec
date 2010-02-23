@@ -1,4 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables,EmptyDataDecls,TypeFamilies,DeriveDataTypeable #-}
+module Main where
+
 import Codec.TPTP.Base hiding (formula, Var, Formula, Term)
 import qualified Codec.TPTP.Base as TPTP
 import Codec.TPTP.Import
