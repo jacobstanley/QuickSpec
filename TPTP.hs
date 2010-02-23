@@ -15,6 +15,7 @@ import Test.QuickCheck
 import qualified Term
 import Equations hiding (prune)
 import CongruenceClosure
+import Debug.Trace
 
 -- Parsing
 
@@ -145,28 +146,20 @@ load ctx d fs univ = do
     consequences d univ' [] (convert f (left f), convert f (right f))
       where convert f t = killSymbols (toQuickSpec ctx (vars f) t)
 
-allTerms :: Context -> Int -> Int -> [Formula] -> [Term.Term Term.Symbol]
-allTerms _ 0 _ _ = []
-allTerms ctx (d+1) d' fs = sort (concat [ terms ctx base ty | ty <- Term.allTypes ctx ])
+allTerms :: Ord a => Context -> Int -> (Term.Term Term.Symbol -> a) -> [Term.Term Term.Symbol]
+allTerms _ 0 _ = []
+allTerms ctx (d+1) rep = sort (concat [ terms ctx base ty | ty <- Term.allTypes ctx ])
   where base ty = [ t | t <- pruned, Term.termType t == ty ]
-        pruned = prune ctx d' fs (allTerms ctx d d' fs)
-
-prune :: Context -> Int -> [Formula] -> [Term.Term Term.Symbol] -> [Term.Term Term.Symbol]
-prune ctx d fs ts = runCC (length ctx) $ do
-                      load ctx d fs ts
-                      reps <- forM ts $ \x -> flatten (killSymbols x) >>= rep
-                      return (takeReps (zip reps ts))
-  where takeReps = sort . map (snd . head) . groupBy (equalsOn fst) . sort
-        equalsOn f x y = f x == f y
+        pruned = map (head . sort) (partitionBy rep (allTerms ctx d rep))
 
 check :: Int -> Problem -> Bool
-check d prob = and $ runCC (length ctx) $ do
+check d prob = and $ runCC (length ctx) $ trace (show (length univ)) $ do
                  load ctx d (axioms prob) univ
                  forM (conjectures prob) $ \f ->
                    canDerive (toQuickSpec ctx (vars f) (left f))
                              (toQuickSpec ctx (vars f) (right f))
   where ctx = context prob
-        univ = allTerms ctx d d (axioms prob)
+        univ = allTerms ctx d id
 
 -- Main program
 
