@@ -159,6 +159,15 @@ prune ctx d fs ts = runCC (length ctx) $ do
   where takeReps = sort . map (snd . head) . groupBy (equalsOn fst) . sort
         equalsOn f x y = f x == f y
 
+check :: Int -> Problem -> Bool
+check d prob = and $ runCC (length ctx) $ do
+                 load ctx d (axioms prob) univ
+                 forM (conjectures prob) $ \f ->
+                   canDerive (toQuickSpec ctx (vars f) (left f))
+                             (toQuickSpec ctx (vars f) (right f))
+  where ctx = context prob
+        univ = allTerms ctx d d (axioms prob)
+
 -- Main program
 
 defaultPath = "/home/nick/TPTP-v4.0.1"
@@ -177,4 +186,4 @@ main = do
   problems <- problemList
   forM problems $ \name -> do
          prob <- fmap (convert . checkKind) (parseProblem path name)
-         prob `seq` return prob -- give an error if conversion fails
+         print (check 3 prob)
