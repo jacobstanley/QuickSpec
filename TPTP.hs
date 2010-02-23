@@ -2,7 +2,7 @@
 import Codec.TPTP.Base hiding (formula, Var, Formula, Term)
 import qualified Codec.TPTP.Base as TPTP
 import Codec.TPTP.Import
-import Control.Arrow
+import Control.Arrow hiding (left, right)
 import Control.Monad
 import Control.Monad.Identity
 import Data.List hiding (find)
@@ -13,7 +13,8 @@ import System
 import System.IO
 import Test.QuickCheck
 import qualified Term
-import Equations
+import Equations hiding (prune)
+import CongruenceClosure
 
 -- Parsing
 
@@ -134,6 +135,29 @@ arity :: TypeRep -> Int
 arity ty = case Term.funTypes [ty] of
              [] -> 0
              [(_, rhs)] -> 1+arity rhs
+
+-- Term generation and pruning.
+
+load :: Context -> Int -> [Formula] -> [Term.Term Term.Symbol] -> CC ()
+load ctx d fs univ = do
+  univ' <- loadUniv univ
+  forM_ fs $ \f ->
+    consequences d univ' [] (convert f (left f), convert f (right f))
+      where convert f t = killSymbols (toQuickSpec ctx (vars f) t)
+
+allTerms :: Context -> Int -> Int -> [Formula] -> [Term.Term Term.Symbol]
+allTerms _ 0 _ _ = []
+allTerms ctx (d+1) d' fs = sort (concat [ terms ctx base ty | ty <- Term.allTypes ctx ])
+  where base ty = [ t | t <- pruned, Term.termType t == ty ]
+        pruned = prune ctx d' fs (allTerms ctx d d' fs)
+
+prune :: Context -> Int -> [Formula] -> [Term.Term Term.Symbol] -> [Term.Term Term.Symbol]
+prune ctx d fs ts = runCC (length ctx) $ do
+                      load ctx d fs ts
+                      reps <- forM ts $ \x -> flatten (killSymbols x) >>= rep
+                      return (takeReps (zip reps ts))
+  where takeReps = sort . map (snd . head) . groupBy (equalsOn fst) . sort
+        equalsOn f x y = f x == f y
 
 -- Main program
 
