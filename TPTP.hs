@@ -35,13 +35,18 @@ verbose f file = do
   return result
 
 parseProblem :: FilePath -> FilePath -> IO [TPTP_Input]
-parseProblem dir = verbose (fmap checkKind . parseWithIncludes dir) . relativeTo dir . inProblemDir
+parseProblem dir = verbose (fmap checkKind . parseWithIncludes dir) . relativeTo dir
 
 parseWithIncludes :: FilePath -> FilePath -> IO [TPTP_Input]
-parseWithIncludes dir file = parseFile file >>= fmap concat . mapM parseIncludes
-  where parseIncludes (Include file []) = parseWithIncludes dir (relativeTo dir file)
+parseWithIncludes dir file = do
+  xs <- fmap lines (readFile file)
+  if "% Status   : Unsatisfiable" `elem` xs
+    then f file
+    else error "wrong kind of problem"
+  where parseIncludes (Include file []) = f (relativeTo dir file)
         parseIncludes (Include file _) = error "strange include directive"
         parseIncludes x = return [x]
+        f file = parseFile file >>= fmap concat . mapM parseIncludes
 
 -- Problem representation
 
@@ -186,7 +191,7 @@ check d prob = or $ runCC (length ctx) $ trace (show (length univ)) $ do
 defaultPath = "/home/nick/TPTP-v4.0.1"
 
 test :: FilePath -> IO ()
-test file = parseProblem defaultPath file >>= print . convert
+test file = parseProblem defaultPath (inProblemDir file) >>= print . convert
 
 main = do
   hSetBuffering stdout NoBuffering
