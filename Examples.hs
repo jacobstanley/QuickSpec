@@ -186,6 +186,7 @@ main = do
                [x] -> x
       Just (cons, p) = lookup test examples
   laws 3 cons p
+  congruenceCheck 3 cons
 
 newtype Index = Index Int deriving (Eq, Ord, CoArbitrary, Random, Num, Show, Typeable)
 instance Arbitrary Index where arbitrary = choose (0, 15)
@@ -229,6 +230,10 @@ instance Ord Queue where
 instance Arbitrary Queue where
   arbitrary = liftM2 Queue arbitrary arbitrary
 
+instance Classify Queue where
+  type Value Queue = [Int]
+  evaluate = return . listQ
+
 deriving instance Typeable2 State
 
 listQ (Queue xs ys) = xs ++ reverse ys
@@ -239,7 +244,8 @@ nullQ _ = False
 
 inl x (Queue xs ys) = Queue (x:xs) ys
 inr y (Queue xs ys) = Queue xs (y:ys)
-outl = withLeft (\(x:xs) ys -> Queue xs ys)
+outl (Queue (x:xs) ys) = Queue xs ys
+--outl = withLeft (\(x:xs) ys -> Queue xs ys)
 outr = withRight (\xs (y:ys) -> Queue xs ys)
 peekl = withLeft (\(x:xs) ys -> x)
 peekr = withRight (\xs (y:ys) -> y)
@@ -281,13 +287,13 @@ peeklM = gets peekl
 peekrM = gets peekr
 
 queues = describe "queues" [
- con "new" newM,
- con "null" nullM,
- con "inl" inlM,
- con "inr" inrM,
- con "outl" outlM,
- con "outr" outrM,
- con "peekl" peeklM,
- con "peekr" peekrM,
+ con "new" new,
+ con "null" nullQ,
+ con "inl" inl,
+ con "inr" inr,
+ con "outl" outl,
+ con "outr" outr,
+ con "peekl" peekl,
+ con "peekr" peekr,
  con "()" ()
  ]

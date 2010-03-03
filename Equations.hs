@@ -243,7 +243,7 @@ laws depth ctx0 p = do
             ]
   seeds <- genSeeds
   putStrLn "== classes =="
-  cs <- tests depth ctx seeds
+  cs <- tests (take 1) depth ctx seeds
   let eqs cond = map head
                $ partitionBy equationOrder
                $ [ (y,x) | x:xs <- map sort (unpack (restrict cond cs)), funTypes [termType x] == [], y <- xs ]
@@ -299,10 +299,29 @@ memoSym ctx f = (arr !) . label
 --   return (n, cs)
 -- --  if cs0 == cs1 then return (n, cs) else tests (d+1) ctx vals n
 
-tests :: Int -> Context -> [(StdGen, Int)] -> IO (Classes (Term Symbol))
-tests 0 _ _ = return (pack [])
-tests d ctx vals = do
-  cs0 <- tests (d-1) ctx vals
-  let reps = map head (map sort (unpack cs0))
+tests :: ([Term Symbol] -> [Term Symbol]) -> Int -> Context -> [(StdGen, Int)] -> IO (Classes (Term Symbol))
+tests f 0 _ _ = return (pack [])
+tests f d ctx vals = do
+  cs0 <- tests f (d-1) ctx vals
+  let reps = concatMap f (map sort (unpack cs0))
       base ty = [ t | t <- reps, termType t == ty ]
   test d ctx vals base
+
+congruenceCheck :: Int -> Context -> IO ()
+congruenceCheck d ctx = do
+  seeds <- genSeeds
+  terms <- fmap unpack (tests id d (zipWith relabel [0..] (ctx ++ undefinedSyms ctx)) seeds)
+  let result =
+        runCCctx ctx $ do
+          loadUniv (concat terms)
+          forM terms $ \(t:ts) ->
+            forM ts $ \t' -> liftM2 (=:=) (flatten (killSymbols t))
+                                          (flatten (killSymbols t'))
+          let heads = map head terms
+          reps <- mapM (\x -> flatten (killSymbols x) >>= rep) heads
+          return (zip heads reps)
+      nontrivial c = length c > 1
+  case filter nontrivial (partitionBy snd (sort result)) of
+    [] -> return ()
+    (((t,_):(u,_):_):_) ->
+      putStrLn $ "Error! " ++ show t ++ " and " ++ show u ++ " are not equal, but can be proved so"
