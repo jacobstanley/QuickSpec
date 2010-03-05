@@ -248,7 +248,7 @@ laws depth ctx0 p = do
                $ partitionBy equationOrder
                $ [ (y,x) | x:xs <- map sort (unpack (restrict cond cs)), funTypes [termType x] == [], y <- xs ]
   printf "%d raw equations.\n\n" (length (eqs Always))
-  let univ = concat (unpack cs)
+  let univ = filter (not . termIsUndefined) (concat (unpack cs))
   printf "Universe has %d terms.\n" (length univ)
   putStrLn "== definitions =="
   sequence_
