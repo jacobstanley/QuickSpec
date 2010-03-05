@@ -308,9 +308,10 @@ tests f d ctx vals = do
   test d ctx vals base
 
 congruenceCheck :: Int -> Context -> IO ()
-congruenceCheck d ctx = do
+congruenceCheck d ctx0 = do
+  let ctx = zipWith relabel [0..] (ctx0 ++ undefinedSyms ctx0)
   seeds <- genSeeds
-  terms <- fmap unpack (tests id d (zipWith relabel [0..] (ctx ++ undefinedSyms ctx)) seeds)
+  terms <- fmap unpack (tests id d (zipWith relabel [0..] ctx) seeds)
   let result =
         runCCctx ctx $ do
           loadUniv (concat terms)
@@ -321,7 +322,8 @@ congruenceCheck d ctx = do
           reps <- mapM (\x -> flatten (killSymbols x) >>= rep) heads
           return (zip heads reps)
       nontrivial c = length c > 1
-  case filter nontrivial (partitionBy snd (sort result)) of
+  case filter nontrivial (partitionBy snd result) of
     [] -> return ()
-    (((t,_):(u,_):_):_) ->
-      putStrLn $ "Error! " ++ show t ++ " and " ++ show u ++ " are not equal, but can be proved so"
+    tss ->
+      putStrLn $ "Error! The following terms are not equal, but can be proved so: " ++ show (map (map show . sort . map fst) tss)
+
