@@ -27,9 +27,9 @@ bools = describe "bools" [
  ]
 
 base = [
- var "x" int ]
- -- var "y" int,
- -- var "z" int ]
+ var "x" int,
+ var "y" int,
+ var "z" int ]
   where int :: Int
         int = undefined
 
@@ -310,14 +310,14 @@ peekrM = gets peekr
 
 queues = describe "queues" [
  con "new" new,
- -- con "null" nullQ,
+ con "null" nullQ,
  con "inl" inl,
  con "inr" inr,
- con "outl" outl
- -- con "outr" outr,
- -- con "peekl" peekl,
- -- con "peekr" peekr,
- -- con "()" ()
+ con "outl" outl,
+ con "outr" outr,
+ con "peekl" peekl,
+ con "peekr" peekr,
+ con "()" ()
  ]
 
 allTerms reps n _ _ | n < 0 = error "oops"

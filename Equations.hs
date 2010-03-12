@@ -315,22 +315,19 @@ congruenceCheck :: Int -> Context -> IO ()
 congruenceCheck d ctx0 = do
   let ctx = zipWith relabel [0..] (ctx0 ++ undefinedSyms ctx0)
   seeds <- genSeeds
-  terms <- fmap unpack (tests id d (zipWith relabel [0..] ctx) seeds)
-  let result =
-        runCCctx ctx $ do
-          forM_ terms $ \(t:ts) ->
-            forM_ ts $ \t' -> do
-                           ft <- flatten (killSymbols t)
-                           ft' <- flatten (killSymbols t')
-                           ft =:= ft'
-          let heads = map head terms
-          reps <- mapM (\x -> flatten (killSymbols x) >>= rep) heads
-          allReps <- mapM (\x -> flatten (killSymbols x) >>= rep) (concat terms)
-          return (zip heads reps)
-      nontrivial c = length c > 1
-  case filter nontrivial (partitionBy snd result) of
-    [] -> return ()
-    tss ->
-      putStrLn $ "Error! The following terms are not equal, but can be proved so: " ++ show (map (map show . sort . map fst) tss)
-
-
+  terms <- fmap (sort . map sort . unpack) (tests id d (zipWith relabel [0..] ctx) seeds)
+  -- Check: for all f and x, rep (f $$ x) == rep(rep f $$ rep x).
+  let reps = Map.unions [ Map.fromList (zip ts (repeat t)) | ts@(t:_) <- terms ]
+      rep x = Map.findWithDefault undefined x reps
+      defined x = Map.member x reps
+  forM_ terms $ \fs@(f:_) ->
+    forM_ terms $ \xs@(x:_) ->
+      when (defined (App f x)) $ do
+        forM_ fs $ \f' ->
+          forM_ xs $ \x' -> do
+            when (defined (App f' x') && rep (App f' x') /= rep (App f x)) $ do
+              putStrLn "Not a congruence relation:"
+              sequence_ [ printf "  %s == %s\n" (show t) (show u) | (t, u) <- [(f, f'), (x, x')], t /= u ]
+              putStrLn "but"
+              printf "  %s /= %s\n" (show (App f x)) (show (App f' x'))
+              error "not a congruence relation"
