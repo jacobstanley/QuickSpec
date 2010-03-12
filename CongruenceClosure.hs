@@ -80,10 +80,10 @@ propagate1 (a, b) = do
         _ -> fmap (\x -> (True, x)) (updateUses r r' (fromMaybe [] funUses) (fromMaybe [] argUses))
 
 updateUses r r' funUses argUses = do
-  forM_ funUses $ \(x, c) -> modifyLookup (delete2 x r)
   modifyFunUse (IntMap.delete r)
   modifyArgUse (IntMap.delete r)
   modifyLookup (IntMap.delete r)
+  forM_ funUses $ \(x, c) -> modifyLookup (delete2 x r)
   let repPair (x, c) = do
         x' <- rep x
         return (x', c)
