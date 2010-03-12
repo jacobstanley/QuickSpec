@@ -36,17 +36,17 @@ data S = S {
 type CC = StateT S UF
 
 invariant :: String -> CC ()
--- invariant _ = return ()
-invariant str = do
-  S funUse argUse lookup <- get
-  -- keys of all maps are representatives
-  let check phase x = do
-       b <- lift (UF.isRep x)
-       if b then return () else error (printf "%s, %s appears as a key in %s but is not a rep in:\nfunUse=%s\nargUse=%s\nlookup=%s" str (show x) phase (show funUse) (show argUse) (show lookup))
-  mapM_ (check "funUse") (IntMap.keys funUse)
-  mapM_ (check "argUse") (IntMap.keys argUse)
-  mapM_ (check "lookup") (IntMap.keys lookup)
-  mapM_ (mapM_ (check "inner lookup") . IntMap.keys) (IntMap.elems lookup)
+invariant _ = return ()
+-- invariant str = do
+--   S funUse argUse lookup <- get
+--   -- keys of all maps are representatives
+--   let check phase x = do
+--        b <- lift (UF.isRep x)
+--        if b then return () else error (printf "%s, %s appears as a key in %s but is not a rep in:\nfunUse=%s\nargUse=%s\nlookup=%s" str (show x) phase (show funUse) (show argUse) (show lookup))
+--   mapM_ (check "funUse") (IntMap.keys funUse)
+--   mapM_ (check "argUse") (IntMap.keys argUse)
+--   mapM_ (check "lookup") (IntMap.keys lookup)
+--   mapM_ (mapM_ (check "inner lookup") . IntMap.keys) (IntMap.elems lookup)
 
 modifyFunUse f = modify (\s -> s { funUse = f (funUse s) })
 modifyArgUse f = modify (\s -> s { argUse = f (argUse s) })
