@@ -27,9 +27,9 @@ bools = describe "bools" [
  ]
 
 base = [
- var "x" int,
- var "y" int,
- var "z" int ]
+ var "x" int ]
+ -- var "y" int,
+ -- var "z" int ]
   where int :: Int
         int = undefined
 
@@ -50,6 +50,28 @@ lists = describe "lists" [
  con "null" (null :: [Int] -> Bool)]
   where list :: [Int]
         list = undefined
+
+data Monotonic = Monotonic Int (Int -> Int) deriving Typeable
+instance Arbitrary Monotonic where
+  arbitrary = liftM2 Monotonic arbitrary arbitrary
+
+instance Classify Monotonic where
+  type Value Monotonic = Int
+  evaluate m = evaluate (monotonic m)
+
+instance Show Monotonic where
+  show (Monotonic base f) = show (base, zip [-20..20] $ map f [-20..20])
+
+monotonic :: Monotonic -> Int -> Int
+monotonic _ n | n >= 500 || n < -500 = error "oops"
+monotonic (Monotonic base f) n | n >= 0 = base + sum [ abs (f i) | i <- [0 .. n-1] ]
+                               | otherwise = base - sum [ abs (f i) | i <- [n..negate 1] ]
+
+prop_monotonic m = Data.List.sort xs == xs
+  where xs = map (monotonic m) [-20..20]
+
+prop_false m = Data.List.nub xs /= xs
+  where xs = map (monotonic m) [-20..20]
 
 mergeL :: [Int] -> [Int] -> [Int]
 mergeL [] xs = xs
@@ -146,7 +168,7 @@ examples = [
  ("heaps", (base ++ bools ++ lists ++ heaps, about ["heaps"])),
  ("arrays", (base ++ arrays, allOfThem)),
  ("comp", (base ++ comp, allOfThem)),
- ("queues", (base ++ queues ++ bools, about ["queues"])),
+ ("queues", (base ++ queues, about ["queues"])),
  ("pretty", (base ++ nats ++ pretty, about ["pretty"])),
  ("regex", (regex, allOfThem))
  ]
@@ -288,12 +310,57 @@ peekrM = gets peekr
 
 queues = describe "queues" [
  con "new" new,
- con "null" nullQ,
+ -- con "null" nullQ,
  con "inl" inl,
  con "inr" inr,
- con "outl" outl,
- con "outr" outr,
- con "peekl" peekl,
- con "peekr" peekr,
- con "()" ()
+ con "outl" outl
+ -- con "outr" outr,
+ -- con "peekl" peekl,
+ -- con "peekr" peekr,
+ -- con "()" ()
  ]
+
+allTerms reps n _ _ | n < 0 = error "oops"
+allTerms reps 0 ctx _ = []
+allTerms reps (n+1) ctx ty = syms ctx ty ++
+                         [ App f x
+                         | ty' <- argTypes ctx ty
+                         , x  <- allTerms reps n ctx ty'
+                         , not (termIsUndefined x)
+                         , f  <- allTerms reps (n+1) ctx (mkFunTy ty' ty)
+                         , f `elem` reps
+                         , x `elem` reps
+                         , not (termIsUndefined f)
+                         ]
+
+allTerms' reps n _ _ | n < 0 = error "oops"
+allTerms' reps 0 ctx _ = []
+allTerms' reps (n+1) ctx ty = syms ctx ty ++
+                          [ App f x
+                          | ty' <- argTypes ctx ty
+                          , x <- allTerms' reps n ctx ty'
+                          , not (termIsUndefined x)
+                          , f  <- allTerms' reps (n+1-size x) ctx (mkFunTy ty' ty)
+                          , not (termIsUndefined f)
+                          , f `elem` reps
+                          , x `elem` reps
+                          ]
+
+syms ctx ty = [ sym elt
+              | elt <- ctx
+              , symbolType elt == ty
+              , let sym = case typ elt of
+                            TVar -> Var
+                            TConst -> Const
+              ]
+
+count f n d ctx = (length xs, length ys)
+  where (xs, ys) = Data.List.partition p (concat [ f n ctx ty | ty <- allTypes ctx ])
+        p x = depth x <= d
+{-
+main = do
+  let example = base ++ lists
+  cs <- genSeeds >>= tests 3 (zipWith relabel [0..] example)
+  let reps = map head (unpack cs)
+  print (count (allTerms reps) 3 3 (zipWith relabel [0..] example))
+  print (count (allTerms' reps) 7 4 (zipWith relabel [0..] example))-}

@@ -1,4 +1,4 @@
-module UnionFind(UF, Replacement((:>)), newSym, (=:=), rep, frozen, runUF, S) where
+module UnionFind(UF, Replacement((:>)), newSym, (=:=), rep, frozen, runUF, S, isRep) where
 
 import Prelude hiding (min)
 import Control.Monad.State.Strict
@@ -45,6 +45,11 @@ rep t = do
       r <- rep t'
       when (t' /= r) $ putLinks (IntMap.insert t r m)
       return r
+
+isRep :: Int -> UF Bool
+isRep t = do
+  t' <- frozen (rep t)
+  return (t == t')
 
 frozen :: UF a -> UF a
 frozen x = fmap (evalState x) get

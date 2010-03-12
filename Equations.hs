@@ -2,6 +2,7 @@
 module Equations where
 
 import Control.Arrow
+import Control.Monad.State
 import Control.Monad.Writer
 import Control.Parallel.Strategies
 import Data.Array hiding (range)
@@ -307,23 +308,25 @@ tests f d ctx vals = do
       base ty = [ t | t <- reps, termType t == ty ]
   test d ctx vals base
 
-congruenceCheck :: Int -> Context -> IO ()
+-- congruenceCheck :: Int -> Context -> IO ()
 congruenceCheck d ctx0 = do
   let ctx = zipWith relabel [0..] (ctx0 ++ undefinedSyms ctx0)
   seeds <- genSeeds
   terms <- fmap unpack (tests id d (zipWith relabel [0..] ctx) seeds)
-  let result =
+  let (result, s, allReps) =
         runCCctx ctx $ do
-          loadUniv (concat terms)
-          forM terms $ \(t:ts) ->
-            forM ts $ \t' -> liftM2 (=:=) (flatten (killSymbols t))
-                                          (flatten (killSymbols t'))
+          forM_ terms $ \(t:ts) ->
+            forM_ ts $ \t' -> liftM2 (=:=) (flatten (killSymbols t))
+                                           (flatten (killSymbols t'))
           let heads = map head terms
           reps <- mapM (\x -> flatten (killSymbols x) >>= rep) heads
-          return (zip heads reps)
+          allReps <- mapM (\x -> flatten (killSymbols x) >>= rep) (concat terms)
+          s <- get
+          return (zip heads reps, s, zip (concat terms) allReps)
       nontrivial c = length c > 1
   case filter nontrivial (partitionBy snd result) of
-    [] -> return ()
+    [] -> mapM_ print (partitionBy snd result) >> mapM_ print terms
     tss ->
       putStrLn $ "Error! The following terms are not equal, but can be proved so: " ++ show (map (map show . sort . map fst) tss)
+  return (s, allReps, terms)
 

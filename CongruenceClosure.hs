@@ -13,6 +13,7 @@ import Data.List(foldl')
 import Test.QuickCheck
 import Test.QuickCheck.Arbitrary
 import Test.QuickCheck.Monadic
+import Text.Printf
 
 lookup2 :: Int -> Int -> IntMap (IntMap a) -> Maybe a
 lookup2 k1 k2 m = IntMap.lookup k2 (IntMap.findWithDefault IntMap.empty k1 m)
@@ -34,6 +35,19 @@ data S = S {
 
 type CC = StateT S UF
 
+invariant :: String -> CC ()
+-- invariant _ = return ()
+invariant str = do
+  S funUse argUse lookup <- get
+  -- keys of all maps are representatives
+  let check phase x = do
+       b <- lift (UF.isRep x)
+       if b then return () else error (printf "%s, %s appears as a key in %s but is not a rep in:\nfunUse=%s\nargUse=%s\nlookup=%s" str (show x) phase (show funUse) (show argUse) (show lookup))
+  mapM_ (check "funUse") (IntMap.keys funUse)
+  mapM_ (check "argUse") (IntMap.keys argUse)
+  mapM_ (check "lookup") (IntMap.keys lookup)
+  mapM_ (mapM_ (check "inner lookup") . IntMap.keys) (IntMap.elems lookup)
+
 modifyFunUse f = modify (\s -> s { funUse = f (funUse s) })
 modifyArgUse f = modify (\s -> s { argUse = f (argUse s) })
 addFunUses xs s = modifyFunUse (IntMap.insertWith (++) s xs)
@@ -46,15 +60,19 @@ newSym = lift UF.newSym
 
 ($$) :: Int -> Int -> CC Int
 f $$ x = do
+  invariant (printf "before %s$$%s" (show f) (show x))
   m <- gets lookup
   f' <- rep f
   x' <- rep x
+  invariant (printf "at %s$$%s:1" (show f) (show x))
   case lookup2 x' f' m of
     Nothing -> do
       c <- newSym
+      invariant (printf "at %s$$%s:2" (show f) (show x))
       putLookup (insert2 x' f' c m)
       addFunUses [(x', c)] f'
       addArgUses [(f', c)] x'
+      invariant (printf "after %s$$%s" (show f) (show x))
       return c
     Just k -> return k
 
@@ -69,6 +87,7 @@ propagate (a, b) = do
   return unified
 
 propagate1 (a, b) = do
+  invariant (printf "before propagate (%s, %s)" (show a) (show b))
   res <- lift (a UF.=:= b)
   case res of
     Nothing -> return (False, [])
@@ -83,7 +102,10 @@ updateUses r r' funUses argUses = do
   modifyFunUse (IntMap.delete r)
   modifyArgUse (IntMap.delete r)
   modifyLookup (IntMap.delete r)
-  forM_ funUses $ \(x, c) -> modifyLookup (delete2 x r)
+  forM_ funUses $ \(x, c) -> do
+    x' <- rep x
+    modifyLookup (delete2 x' r)
+  invariant (printf "after deleting %s" (show r))
   let repPair (x, c) = do
         x' <- rep x
         return (x', c)
@@ -111,6 +133,7 @@ updateUses r r' funUses argUses = do
   addArgUses argNewUses r'
 
   putLookup (if IntMap.null argM then m' else IntMap.insert r' argM m')
+  invariant (printf "after updateUses (%s, %s)" (show r) (show r'))
 
   return pending
 
