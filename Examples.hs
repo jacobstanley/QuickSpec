@@ -407,7 +407,7 @@ queuesM = describe "queuesM" [
  -- con "read" readB,
  con "read" readV,
  -- con "return" (return :: Bool -> QueueProg Bool),
- con "return" (return :: Int -> QueueProg Int),
+ con "return" (\x v -> cps $ symbolic x >>= writeV v),
  var "k" (undefined :: QueueProg ()),
  con "empty" (Stop . (cps $ run newM)),
  -- con "null" (\v -> cps $ run nullM >>= writeB v),
