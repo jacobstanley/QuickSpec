@@ -74,6 +74,11 @@ symbols (App s t) = nub (symbols s ++ symbols t)
 symbols (Var s)   = [s]
 symbols (Const s) = [s]
 
+mapConsts :: (a -> b) -> Term a -> Term b
+mapConsts f (Var v) = Var v
+mapConsts f (Const c) = Const (f c)
+mapConsts f (App t u) = App (mapConsts f t) (mapConsts f u)
+
 mapVars :: (Symbol -> Symbol) -> Term c -> Term c
 mapVars f (Const k) = Const k
 mapVars f (Var v)   = Var (f v)
@@ -207,11 +212,8 @@ class (Typeable a, Ord (Value a), Typeable (Value a)) => Classify a where
   rhs :: a -> Data
   rhs = error "tried to get the rhs of a non-function"
 
-  varLike :: a -> Bool
-  varLike _ = False
-
-  validSubstitution :: [(a,a)] -> Bool
-  validSubstitution _ = error "validSubstitution"
+  validSubstitution :: a -> [(Symbol,Term Symbol)] -> Bool
+  validSubstitution _ _ = True
 
 evalMap :: Classify a => ((a -> Value a) -> f a -> f (Value a)) -> f a -> Gen (f (Value a))
 evalMap map x = do

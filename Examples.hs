@@ -360,6 +360,8 @@ instance Classify Var where
   type Value Var = Var
   evaluate = return
 
+  validSubstitution _ s = nubSort (map snd s) == Data.List.sort (map snd s)
+
 type Vars a = (a, a, a)
 read X (x, _, _) = x
 read Y (_, y, _) = y

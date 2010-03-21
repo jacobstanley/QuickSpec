@@ -122,15 +122,20 @@ xks         `merge` []  = xks
   | x == y    = (x, k `min` n) : (xks `merge` yns)
   | otherwise = (y,n) : (((x,k):xks) `merge` yns)
 
-consequences :: Int -> [(Int, Int, TypeRep)] -> [Symbol] -> (Term Int, Term Int) -> [(Term Int, Term Int)]
-consequences d univ rigid (t, u) = cons1 t u `mplus` cons1 u t
+consequences :: Context -> Int -> [(Int, Int, TypeRep)] -> [Symbol] -> (Term Int, Term Int) -> [(Term Int, Term Int)]
+consequences ctx d univ rigid (t, u) = cons1 t u `mplus` cons1 u t
     where cons1 t u = do
             s <- mapM substs [ (v,d) | (v, d) <- varDepths d t, v `notElem` rigid ]
             s' <- case rigid of
                     [] -> [[]]
                     [i, j] -> [[(i, Const (label j)), (j, Const (label i))], []]
+            guard (ok (s ++ s'))
             return (subst (s ++ s') t, subst (s ++ s') u)
           substs (v, d) = [ (v, Const s) | (_, s, ty) <- takeWhile (\(d', _, _) -> d' <= d) univ, ty == symbolType v ]
+          ok s = all okAtType (partitionBy (show . symbolType . fst) s)
+          okAtType s@((v,_):_) =
+            case symbolClass v of
+              Data x -> validSubstitution x (map (id *** mapConsts (ctx !!)) s)
 
 unify (x, y) = do
   x' <- flatten x
@@ -144,17 +149,15 @@ flatten (App t u) = do
   u' <- flatten u
   t' $$ u'
 
-killSymbols (Var s) = Var s
-killSymbols (Const s) = Const (label s)
-killSymbols (App t u) = App (killSymbols t) (killSymbols u)
+killSymbols = mapConsts label
 
-prune1 :: Int -> [(Int, Int, TypeRep)] -> [Symbol] -> [(Term Symbol, Term Symbol)] -> CC [(Term Symbol, Term Symbol)]
-prune1 d univ rigid es = fmap snd (runWriterT (mapM_ (consider univ) es))
+prune1 :: Context -> Int -> [(Int, Int, TypeRep)] -> [Symbol] -> [(Term Symbol, Term Symbol)] -> CC [(Term Symbol, Term Symbol)]
+prune1 ctx d univ rigid es = fmap snd (runWriterT (mapM_ (consider univ) es))
     where consider univ (t, u) = do
             b <- lift (canDerive t u)
             when (not b) $ do
               tell [(t, u)]
-              lift (mapM_ unify (consequences d univ rigid (killSymbols t, killSymbols u)))
+              lift (mapM_ unify (consequences ctx d univ rigid (killSymbols t, killSymbols u)))
 {-
 prune2 :: Int -> [(Int, Int, TypeRep)] -> [(Term Symbol, Term Symbol)] -> [(Term Symbol, Term Symbol)] -> CC () [(Term Symbol, Term Symbol)]
 prune2 d univ committed [] = return committed
@@ -174,8 +177,8 @@ loadUniv univ = fmap (sortBy (comparing (\(d,_,_) -> d))) (mapM f univ)
 prune :: Context -> Int -> [Term Symbol] -> [(Term Symbol, Term Symbol)] -> [(Condition, [(Term Symbol, Term Symbol)])] -> [(Condition, Term Symbol, Term Symbol)]
 prune ctx d univ0 es ess = runCCctx ctx $ do
   univ <- loadUniv univ0
-  es' <- fmap (map (\(t, u) -> (Always, t, u))) (prune1 d univ [] es)
-  ess' <- mapM (\(cond, es) -> fmap (map (\(t, u) -> (cond, t, u))) (frozen (prune1 d univ (condVars cond) es))) ess
+  es' <- fmap (map (\(t, u) -> (Always, t, u))) (prune1 ctx d univ [] es)
+  ess' <- mapM (\(cond, es) -> fmap (map (\(t, u) -> (cond, t, u))) (frozen (prune1 ctx d univ (condVars cond) es))) ess
   return (es' ++ concat ess')
 
 condVars (a :/= b) = [a, b]
