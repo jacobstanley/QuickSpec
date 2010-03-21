@@ -6,6 +6,7 @@ import Prelude hiding (read)
 import Equations hiding (merge, evaluate)
 import Term
 import qualified Data.List
+import Data.Maybe
 import Data.Ord
 import Data.Typeable
 import Test.QuickCheck
@@ -206,7 +207,6 @@ instance Classify (Regex Bool) where
     return (Regex.run (compile r) s)
 
 main = do
-  putStrLn "To do: try queuesM with non-congruent outl and work out why congruence checking doesn't find a problem"
   args <- getArgs
   let test = case args of
                [] -> "bools"
@@ -370,7 +370,12 @@ write X x (_, y, z) = (x, y, z)
 write Y y (x, _, z) = (x, y, z)
 write Z z (x, y, _) = (x, y, z)
 
-newtype Symbolic a = Symbolic ((Vars Bool, Vars Int) -> a) deriving (Arbitrary, Typeable)
+newtype Symbolic a = Symbolic ((Vars Bool, Vars Int) -> a) deriving Typeable
+
+instance (Typeable a, Arbitrary a) => Arbitrary (Symbolic a) where
+  arbitrary = fmap Symbolic (promote arb)
+    where arb (vs1, vs2) = oneof (arbitrary:map return (catMaybes (map3 cast vs1 ++ map3 cast vs2)))
+          map3 f (x, y, z) = [f x, f y, f z]
 
 instance Classify a => Classify (Symbolic a) where
   type Value (Symbolic a) = Value a
@@ -407,7 +412,7 @@ queuesM = describe "queuesM" [
  -- con "read" readB,
  con "read" readV,
  -- con "return" (return :: Bool -> QueueProg Bool),
- con "return" (\x v -> cps $ symbolic x >>= writeV v),
+ -- con "return" (\x v -> cps $ symbolic x >>= writeV v),
  var "k" (undefined :: QueueProg ()),
  con "empty" (Stop . (cps $ run newM)),
  -- con "null" (\v -> cps $ run nullM >>= writeB v),
