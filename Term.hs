@@ -207,6 +207,12 @@ class (Typeable a, Ord (Value a), Typeable (Value a)) => Classify a where
   rhs :: a -> Data
   rhs = error "tried to get the rhs of a non-function"
 
+  varLike :: a -> Bool
+  varLike _ = False
+
+  validSubstitution :: [(a,a)] -> Bool
+  validSubstitution _ = error "validSubstitution"
+
 evalMap :: Classify a => ((a -> Value a) -> f a -> f (Value a)) -> f a -> Gen (f (Value a))
 evalMap map x = do
   evalInside <- promote evaluate
@@ -238,6 +244,10 @@ instance Classify a => Classify [a] where
 instance (Classify a, Classify b) => Classify (a, b) where
   type Value (a, b) = (Value a, Value b)
   evaluate (x, y) = liftM2 (,) (evaluate x) (evaluate y)
+
+instance (Classify a, Classify b, Classify c) => Classify (a, b, c) where
+  type Value (a, b, c) = (Value a, Value b, Value c)
+  evaluate (x, y, z) = liftM3 (,,) (evaluate x) (evaluate y) (evaluate z)
 
 data AnyValue where
   Value :: (Typeable a, Ord a) => a -> AnyValue

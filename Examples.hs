@@ -2,6 +2,7 @@
 
 module Main where
 
+import Prelude hiding (read)
 import Equations hiding (merge, evaluate)
 import Term
 import qualified Data.List
@@ -10,10 +11,12 @@ import Data.Typeable
 import Test.QuickCheck
 import System
 import System.Random
+import Control.Arrow
 import Control.Monad
 import Control.Monad.State
 import PrettyPrinting
-import Regex hiding (State)
+import Regex hiding (State, run)
+import qualified Regex
 
 bools = describe "bools" [
  var "x" False,
@@ -169,6 +172,7 @@ examples = [
  ("arrays", (base ++ arrays, allOfThem)),
  ("comp", (base ++ comp, allOfThem)),
  ("queues", (base ++ queues, about ["queues"])),
+ ("queuesM", (queuesM, about ["queuesM"])),
  ("pretty", (base ++ nats ++ pretty, about ["pretty"])),
  ("regex", (regex, allOfThem))
  ]
@@ -199,15 +203,16 @@ instance Classify (Regex Bool) where
   type Value (Regex Bool) = Bool
   evaluate r = do
     s <- arbitrary
-    return (run (compile r) s)
+    return (Regex.run (compile r) s)
 
 main = do
+  putStrLn "To do: try queuesM with non-congruent outl and work out why congruence checking doesn't find a problem"
   args <- getArgs
   let test = case args of
                [] -> "bools"
                [x] -> x
       Just (cons, p) = lookup test examples
-  laws 3 cons p
+  laws 4 cons p
   congruenceCheck 3 cons
 
 newtype Index = Index Int deriving (Eq, Ord, CoArbitrary, Random, Num, Show, Typeable)
@@ -241,7 +246,7 @@ comp = [
  con "." (\f g x -> f (g (x :: Int) :: Int) :: Int),
  con "id" (id :: Int -> Int)]
 
-data Queue = Queue [Int] [Int] deriving Typeable
+data Queue = Queue [Int] [Int] deriving (Typeable, Show)
 
 instance Eq Queue where
   q1 == q2 = q1 `compare` q2 == EQ
@@ -258,6 +263,11 @@ instance Classify Queue where
 
 deriving instance Typeable2 State
 
+instance (Typeable s, Typeable1 m) => Typeable1 (StateT s m) where
+  typeOf1 (_ :: StateT s m a) = mkTyConApp (mkTyCon "Control.Monad.State.StateT")
+                                           [ typeOf (undefined :: s),
+                                             typeOf1 (undefined :: m a) ]
+
 listQ (Queue xs ys) = xs ++ reverse ys
 
 new = Queue [] []
@@ -266,8 +276,8 @@ nullQ _ = False
 
 inl x (Queue xs ys) = Queue (x:xs) ys
 inr y (Queue xs ys) = Queue xs (y:ys)
-outl (Queue (x:xs) ys) = Queue xs ys
---outl = withLeft (\(x:xs) ys -> Queue xs ys)
+-- outl (Queue (x:xs) ys) = Queue xs ys
+outl = withLeft (\(x:xs) ys -> Queue xs ys)
 outr = withRight (\xs (y:ys) -> Queue xs ys)
 peekl = withLeft (\(x:xs) ys -> x)
 peekr = withRight (\xs (y:ys) -> y)
@@ -276,7 +286,7 @@ withLeft f (Queue xs ys) = f xs ys
 withRight f (Queue xs []) = f [] (reverse xs)
 withRight f (Queue xs ys) = f xs ys
 
-type QueueM a = State Queue a
+type QueueM = State Queue
 
 instance Classify a => Classify (QueueM a) where
   type Value (QueueM a) = (Value a, Queue)
@@ -316,9 +326,95 @@ queues = describe "queues" [
  con "outl" outl,
  con "outr" outr,
  con "peekl" peekl,
- con "peekr" peekr,
- con "()" ()
+ con "peekr" peekr
  ]
+
+newtype QueueProg a = Prog (StateT (Vars Bool, Vars Int) QueueM a) deriving (Typeable, Monad)
+
+runQueueProg :: (Vars Bool, Vars Int) -> Queue -> QueueProg a -> ((Vars Bool, Vars Int), Queue, a)
+runQueueProg vars queue (Prog x) = (newVars, newQueue, answer)
+  where ((answer, newVars), newQueue) = runState (runStateT x vars) queue
+
+newtype Stop a = Stop a deriving Typeable
+
+instance Classify a => Classify (Stop a) where
+  type Value (Stop a) = Value a
+  evaluate (Stop x) = evaluate x
+
+instance Classify a => Classify (QueueProg a) where
+  type Value (QueueProg a) = ((Vars Bool, Vars Int), [Int], Value a)
+  evaluate x = do
+    vars <- arbitrary
+    queue <- arbitrary
+    evaluate (runQueueProg vars queue x)
+
+instance Arbitrary (QueueProg ()) where
+  arbitrary = return (return ())
+
+data Var = X | Y | Z deriving (Typeable, Eq, Ord)
+
+instance Arbitrary Var where
+  arbitrary = elements [X, Y, Z]
+
+instance Classify Var where
+  type Value Var = Var
+  evaluate = return
+
+type Vars a = (a, a, a)
+read X (x, _, _) = x
+read Y (_, y, _) = y
+read Z (_, _, z) = z
+write X x (_, y, z) = (x, y, z)
+write Y y (x, _, z) = (x, y, z)
+write Z z (x, y, _) = (x, y, z)
+
+newtype Symbolic a = Symbolic ((Vars Bool, Vars Int) -> a) deriving (Arbitrary, Typeable)
+
+instance Classify a => Classify (Symbolic a) where
+  type Value (Symbolic a) = Value a
+  evaluate (Symbolic f) = fmap f arbitrary >>= evaluate
+
+symbolic :: Symbolic a -> QueueProg a
+symbolic (Symbolic f) = Prog (gets f)
+
+readB :: Var -> Symbolic Bool
+readB x = Symbolic (read x . fst)
+readV :: Var -> Symbolic Int
+readV x = Symbolic (read x . snd)
+writeB :: Var -> Bool -> QueueProg ()
+writeB x v = Prog (modify (write x v *** id))
+writeV :: Var -> Int -> QueueProg ()
+writeV x v = Prog (modify (id *** write x v))
+
+run :: QueueM a -> QueueProg a
+run = Prog . lift
+
+cps :: QueueProg () -> (QueueProg () -> QueueProg ())
+cps x = \k -> x >> k
+
+queuesM = describe "queuesM" [
+ (con "X" X) { typ = TVar },
+ (con "Y" Y) { typ = TVar },
+ (con "Z" Z) { typ = TVar },
+ con "x" (undefined :: Symbolic Int),
+ con "x" (undefined :: Symbolic Int),
+ con "x" (undefined :: Symbolic Int),
+ con "x" (undefined :: Symbolic Bool),
+ con "y" (undefined :: Symbolic Bool),
+ con "z" (undefined :: Symbolic Bool),
+ con "read" readB,
+ con "read" readV,
+ con "return" (return :: Bool -> QueueProg Bool),
+ con "return" (return :: Int -> QueueProg Int),
+ var "k" (undefined :: QueueProg ()),
+ con "new" (Stop . (cps $ run newM)),
+ con "null" (\v -> cps $ run nullM >>= writeB v),
+ con "inl" (\x -> cps $ symbolic x >>= run . inlM),
+ con "inr" (\x -> cps $ symbolic x >>= run . inrM),
+ con "outl" (cps $ run outlM),
+ con "outr" (cps $ run outrM),
+ con "peekl" (\v -> cps $ run peeklM >>= writeV v),
+ con "peekr" (\v -> cps $ run peekrM >>= writeV v) ]
 
 allTerms reps n _ _ | n < 0 = error "oops"
 allTerms reps 0 ctx _ = []
