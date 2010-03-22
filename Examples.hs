@@ -166,16 +166,16 @@ nats = describe "nats" [
  con "1" (1 :: Int) ]
 
 examples = [
- ("nats", (base ++ nats, allOfThem)),
- ("bools", (base ++ bools, allOfThem)),
- ("lists", (base ++ bools ++ lists, about ["lists"])),
- ("heaps", (base ++ bools ++ lists ++ heaps, about ["heaps"])),
- ("arrays", (base ++ arrays, allOfThem)),
- ("comp", (base ++ comp, allOfThem)),
- ("queues", (base ++ queues, about ["queues"])),
- ("queuesM", (queuesM, about ["queuesM"])),
- ("pretty", (base ++ nats ++ pretty, about ["pretty"])),
- ("regex", (regex, allOfThem))
+ ("nats", (base ++ nats, const True, allOfThem)),
+ ("bools", (base ++ bools, const True, allOfThem)),
+ ("lists", (base ++ bools ++ lists, const True, about ["lists"])),
+ ("heaps", (base ++ bools ++ lists ++ heaps, const True, about ["heaps"])),
+ ("arrays", (base ++ arrays, const True, allOfThem)),
+ ("comp", (base ++ comp, const True, allOfThem)),
+ ("queues", (base ++ queues, const True, about ["queues"])),
+ ("queuesM", (queuesM, noRebinding, about ["queuesM"])),
+ ("pretty", (base ++ nats ++ pretty, const True, about ["pretty"])),
+ ("regex", (regex, const True, allOfThem))
  ]
 
 regex = [
@@ -211,9 +211,9 @@ main = do
   let test = case args of
                [] -> "bools"
                [x] -> x
-      Just (cons, p) = lookup test examples
-  laws 4 cons p
-  congruenceCheck 3 cons
+      Just (cons, p, p') = lookup test examples
+  laws 4 cons p p'
+  congruenceCheck 3 cons p
 
 newtype Index = Index Int deriving (Eq, Ord, CoArbitrary, Random, Num, Show, Typeable)
 instance Arbitrary Index where arbitrary = choose (0, 15)
@@ -412,7 +412,7 @@ queuesM = describe "queuesM" [
  -- con "read" readB,
  con "read" readV,
  -- con "return" (return :: Bool -> QueueProg Bool),
- -- con "return" (\x v -> cps $ symbolic x >>= writeV v),
+ con "return" (\x v -> symbolic x >>= writeV v),
  var "k" (undefined :: QueueProg ()),
  con "empty" (Stop . (cps $ run newM)),
  -- con "null" (\v -> cps $ run nullM >>= writeB v),
@@ -422,6 +422,18 @@ queuesM = describe "queuesM" [
  -- con "outr" (cps $ run outrM),
  con "front" (\v -> cps $ run peeklM >>= writeV v) ]
  -- con "peekr" (\v -> cps $ run peekrM >>= writeV v) ]
+
+noRebinding :: Term Symbol -> Bool
+noRebinding t = evalStateT (check t) [] /= Nothing
+  where check (Var v) | symbolType v == typeOf X = do
+          s <- get
+          guard (v `notElem` s)
+          put (v:s)
+        check (Var v) = return ()
+        check (Const _) = return ()
+        check (App (Const f) (Var v)) | name f == "read" =
+          modify (\s -> if v `elem` s then s else v:s)
+        check (App f x) = check f >> check x
 
 allTerms reps n _ _ | n < 0 = error "oops"
 allTerms reps 0 ctx _ = []

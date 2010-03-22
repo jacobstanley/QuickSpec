@@ -231,7 +231,7 @@ definitions es = nubBy (\(_, t) (_, t') -> fun t == fun t') (filter isDefinition
 allOfThem = const True
 about xs = any (\s -> description s `elem` map Just xs) . symbols
 
-laws depth ctx0 p = do
+laws depth ctx0 p p' = do
   hSetBuffering stdout NoBuffering
   let ctx = zipWith relabel [0..] (ctx0 ++ undefinedSyms ctx0)
   putStrLn "== API =="
@@ -247,7 +247,7 @@ laws depth ctx0 p = do
             ]
   seeds <- genSeeds
   putStrLn "== classes =="
-  cs <- tests (take 1) depth ctx seeds
+  cs <- tests p (take 1) depth ctx seeds
   let eqs cond = map head
                $ partitionBy equationOrder
                $ [ (y,x) | x:xs <- map sort (unpack (restrict cond cs)), funTypes [termType x] == [], y <- xs ]
@@ -260,7 +260,7 @@ laws depth ctx0 p = do
        | (i, (y,x)) <- zip [1..] (definitions (eqs Always))
        ]
   putStrLn "== equations =="
-  let interesting (_, x, y) = p x || p y
+  let interesting (_, x, y) = p' x || p' y
       conds = [ i :/= j | (i:j:_) <- partitionBy (show . symbolType) (filter (\s -> typ s == TVar) ctx) ]
       pruned = filter interesting (prune ctx depth univ (eqs Always) [ (cond, eqs cond) | cond <- conds ])
   sequence_
@@ -275,10 +275,10 @@ laws depth ctx0 p = do
          printf "*** missing term: %s = ???\n"
                 (show (mapVars (\s -> if s `elem` commonVars then s else s { name = "_" ++ name s }) x))
 
-test :: Int -> Context -> [(StdGen, Int)] -> (TypeRep -> [Term Symbol]) -> IO (Classes (Term Symbol))
-test depth ctx seeds base = do
+test :: (Term Symbol -> Bool) -> Int -> Context -> [(StdGen, Int)] -> (TypeRep -> [Term Symbol]) -> IO (Classes (Term Symbol))
+test p depth ctx seeds base = do
   printf "Depth %d: " depth
-  let cs0 = filter (not . null) [ terms ctx base ty | ty <- allTypes ctx ]
+  let cs0 = filter (not . null) [ filter p (terms ctx base ty) | ty <- allTypes ctx ]
   printf "%d terms, " (length (concat cs0))
   let evals = [ toValue . eval (memoSym ctx ctxFun) | (ctxFun, toValue) <- map useSeed seeds ]
       conds = map (\f -> satisfied (f . Const)) evals
@@ -303,22 +303,22 @@ memoSym ctx f = (arr !) . label
 --   return (n, cs)
 -- --  if cs0 == cs1 then return (n, cs) else tests (d+1) ctx vals n
 
-tests :: ([Term Symbol] -> [Term Symbol]) -> Int -> Context -> [(StdGen, Int)] -> IO (Classes (Term Symbol))
-tests f 0 _ _ = return (pack [])
-tests f d ctx vals = do
-  cs0 <- tests f (d-1) ctx vals
+tests :: (Term Symbol -> Bool) -> ([Term Symbol] -> [Term Symbol]) -> Int -> Context -> [(StdGen, Int)] -> IO (Classes (Term Symbol))
+tests p f 0 _ _ = return (pack [])
+tests p f d ctx vals = do
+  cs0 <- tests p f (d-1) ctx vals
   let reps = concatMap f (map sort (unpack cs0))
       base ty = [ t | t <- reps, termType t == ty ]
-  test d ctx vals base
+  test p d ctx vals base
 
 traceM :: Monad m => String -> m ()
 traceM str = trace str (return ())
 
-congruenceCheck :: Int -> Context -> IO ()
-congruenceCheck d ctx0 = do
+congruenceCheck :: Int -> Context -> (Term Symbol -> Bool) -> IO ()
+congruenceCheck d ctx0 p = do
   let ctx = zipWith relabel [0..] (ctx0 ++ undefinedSyms ctx0)
   seeds <- genSeeds
-  terms <- fmap (sort . map sort . unpack) (tests id d (zipWith relabel [0..] ctx) seeds)
+  terms <- fmap (sort . map sort . unpack) (tests p id d (zipWith relabel [0..] ctx) seeds)
   -- Check: for all f and x, rep (f $$ x) == rep(rep f $$ rep x).
   let reps = Map.unions [ Map.fromList (zip ts (repeat t)) | ts@(t:_) <- terms ]
       rep x = Map.findWithDefault undefined x reps
