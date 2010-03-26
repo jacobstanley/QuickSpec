@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables,DeriveDataTypeable,TypeFamilies,GeneralizedNewtypeDeriving,TypeSynonymInstances,StandaloneDeriving,FlexibleInstances #-}
+{-# LANGUAGE ScopedTypeVariables,DeriveDataTypeable,TypeFamilies,GeneralizedNewtypeDeriving,TypeSynonymInstances,StandaloneDeriving,FlexibleInstances,FlexibleContexts,UndecidableInstances #-}
 
 module Main where
 
@@ -10,7 +10,7 @@ import Data.Maybe
 import Data.Ord
 import Data.Typeable
 import Test.QuickCheck
-import System
+import System hiding (getEnv)
 import System.Random
 import Control.Arrow
 import Control.Monad
@@ -174,6 +174,7 @@ examples = [
  ("comp", (base ++ comp, const True, allOfThem)),
  ("queues", (base ++ bools ++ queues, const True, about ["queues"])),
  ("queuesM", (queuesM, noRebinding, about ["queuesM"])),
+ ("arraysM", (arraysM, noRebinding, about ["arraysM"])),
  ("pretty", (base ++ nats ++ pretty, const True, about ["pretty"])),
  ("regex", (regex, const True, allOfThem))
  ]
@@ -228,6 +229,25 @@ instance Classify Index where
   type Value Index = Index
   evaluate = return
 
+type ArrayM = State Array
+
+instance Classify a => Classify (ArrayM a) where
+  type Value (ArrayM a) = (Value a, Array)
+  evaluate x = do
+    a <- arbitrary
+    let (r, a') = runState x a
+    r' <- evaluate r
+    return (r', a')
+
+newA :: ArrayM ()
+newA = put (Array (replicate 16 0))
+
+getA :: Index -> ArrayM Int
+getA (Index ix) = gets (\(Array a) -> a !! ix)
+
+setA :: Index -> Int -> ArrayM ()
+setA (Index ix) v = modify (\(Array a) -> Array [ if i == ix then v else a !! i | i <- [0..15] ])
+
 arrays = [
  var "a" (Array undefined),
  var "i" (Index undefined),
@@ -238,6 +258,25 @@ arrays = [
  con "set" (\(Index ix) v (Array a) -> Array [ if i == ix then v else a !! i | i <- [0..15] ]),
  con "0" (0 :: Int)
  ]
+
+arraysM = describe "arraysM" [
+ (con "X" X) { typ = TVar },
+ (con "Y" Y) { typ = TVar },
+ (con "Z" Z) { typ = TVar },
+ var "x" (undefined :: Symbolic Int),
+ var "y" (undefined :: Symbolic Int),
+ var "z" (undefined :: Symbolic Int),
+ var "i" (undefined :: Symbolic Index),
+ var "j" (undefined :: Symbolic Index),
+ var "k" (undefined :: Symbolic Index),
+ con "read" (read :: Var -> Symbolic Int),
+ con "read" (read :: Var -> Symbolic Index),
+ con "return" (\x v -> symbolic (x :: Symbolic Int) >>= write v :: Prog ArrayM ()),
+ con "return" (\x v -> symbolic (x :: Symbolic Index) >>= write v :: Prog ArrayM ()),
+ var "k" (undefined :: Prog ArrayM ()),
+ con "new" ((cps $ run newA)),
+ con "get" (\ix v -> cps $ symbolic ix >>= run . getA >>= write v),
+ con "set" (\ix x -> cps $ symbolic ix >>= \ix' -> symbolic x >>= run . setA ix')]
 
 comp = [
  var "f" (undefined :: (Int -> Int)),
@@ -330,27 +369,57 @@ queues = describe "queues" [
  con "peekr" peekr
  ]
 
-newtype QueueProg a = Prog (StateT (Vars Bool, Vars Int) QueueM a) deriving (Typeable, Monad)
-
-runQueueProg :: (Vars Bool, Vars Int) -> Queue -> QueueProg a -> ((Vars Bool, Vars Int), Queue, a)
-runQueueProg vars queue (Prog x) = (newVars, newQueue, answer)
-  where ((answer, newVars), newQueue) = runState (runStateT x vars) queue
-
 newtype Stop a = Stop a deriving Typeable
 
 instance Classify a => Classify (Stop a) where
   type Value (Stop a) = Value a
   evaluate (Stop x) = evaluate x
 
-instance Classify a => Classify (QueueProg a) where
-  type Value (QueueProg a) = ((Vars Bool, Vars Int), [Int], Value a)
-  evaluate x = do
-    vars <- arbitrary
-    queue <- arbitrary
-    evaluate (runQueueProg vars queue x)
+newtype Prog m a = Prog (StateT Env m a) deriving Monad
 
-instance Arbitrary (QueueProg ()) where
+instance Typeable1 m => Typeable1 (Prog m) where
+  typeOf1 (_ :: Prog m a) = mkTyConApp (mkTyCon "Prog") [ typeOf1 (undefined :: m a) ]
+
+instance (Typeable1 m, Typeable a, Classify (m (a, Env))) => Classify (Prog m a) where
+  type Value (Prog m a) = Value (m (a, Env))
+  evaluate (Prog x) = do
+    vars <- arbitrary
+    evaluate (runStateT x vars)
+
+instance Monad m => Arbitrary (Prog m ()) where
   arbitrary = return (return ())
+
+type Env = (Vars Int, Vars Index)
+
+values :: Typeable a => Env -> [a]
+values (xs1, xs2) = catMaybes (map3 cast xs1 ++ map3 cast xs2)
+  where map3 f (x, y, z) = [f x, f y, f z]
+
+class InEnv a where
+  getEnv :: Env -> Vars a
+  putEnv :: Vars a -> Env -> Env
+
+instance InEnv Int where
+  getEnv = fst
+  putEnv vs' (_, vs) = (vs', vs)
+
+instance InEnv Index where
+  getEnv = snd
+  putEnv vs' (vs, _) = (vs, vs')
+
+read :: InEnv a => Var -> Symbolic a
+read v = Symbolic (readV v . getEnv)
+
+write :: (InEnv a, Monad m) => Var -> a -> Prog m ()
+write v x = Prog (modify (\env -> putEnv (writeV v x (getEnv env)) env))
+
+type Vars a = (Maybe a, Maybe a, Maybe a)
+readV X (Just x, _, _) = x
+readV Y (_, Just y, _) = y
+readV Z (_, _, Just z) = z
+writeV X x (Nothing, y, z) = (Just x, y, z)
+writeV Y y (x, Nothing, z) = (x, Just y, z)
+writeV Z z (x, y, Nothing) = (x, y, Just z)
 
 data Var = X | Y | Z deriving (Typeable, Eq, Ord)
 
@@ -363,41 +432,23 @@ instance Classify Var where
 
   validSubstitution _ s = nubSort (map snd s) == Data.List.sort (map snd s)
 
-type Vars a = (Maybe a, Maybe a, Maybe a)
-read X (Just x, _, _) = x
-read Y (_, Just y, _) = y
-read Z (_, _, Just z) = z
-write X x (Nothing, y, z) = (Just x, y, z)
-write Y y (x, Nothing, z) = (x, Just y, z)
-write Z z (x, y, Nothing) = (x, y, Just z)
-
-newtype Symbolic a = Symbolic ((Vars Bool, Vars Int) -> a) deriving Typeable
+newtype Symbolic a = Symbolic (Env -> a) deriving Typeable
 
 instance (Typeable a, Arbitrary a) => Arbitrary (Symbolic a) where
   arbitrary = fmap Symbolic (promote arb)
-    where arb (vs1, vs2) = oneof (arbitrary:map return (catMaybes (map3 cast vs1 ++ map3 cast vs2)))
-          map3 f (x, y, z) = [f x, f y, f z]
+    where arb env = oneof (arbitrary:map return (values env))
 
 instance Classify a => Classify (Symbolic a) where
   type Value (Symbolic a) = Value a
   evaluate (Symbolic f) = fmap f arbitrary >>= evaluate
 
-symbolic :: Symbolic a -> QueueProg a
+symbolic :: Monad m => Symbolic a -> Prog m a
 symbolic (Symbolic f) = Prog (gets f)
 
-readB :: Var -> Symbolic Bool
-readB x = Symbolic (read x . fst)
-readV :: Var -> Symbolic Int
-readV x = Symbolic (read x . snd)
-writeB :: Var -> Bool -> QueueProg ()
-writeB x v = Prog (modify (write x v *** id))
-writeV :: Var -> Int -> QueueProg ()
-writeV x v = Prog (modify (id *** write x v))
-
-run :: QueueM a -> QueueProg a
+run :: Monad m => m a -> Prog m a
 run = Prog . lift
 
-cps :: QueueProg () -> (QueueProg () -> QueueProg ())
+cps :: Monad m => Prog m () -> (Prog m () -> Prog m ())
 cps x = \k -> x >> k
 
 queuesM = describe "queuesM" [
@@ -411,17 +462,17 @@ queuesM = describe "queuesM" [
  -- var "y" (undefined :: Symbolic Bool),
  -- var "z" (undefined :: Symbolic Bool),
  -- con "read" readB,
- con "read" readV,
+ con "read" (read :: Var -> Symbolic Int),
  -- con "return" (return :: Bool -> QueueProg Bool),
- con "return" (\x v -> symbolic x >>= writeV v),
- var "k" (undefined :: QueueProg ()),
+ con "return" (\x v -> symbolic (x :: Symbolic Int) >>= write v :: Prog QueueM ()),
+ var "k" (undefined :: Prog QueueM ()),
  con "empty" ((cps $ run newM)),
  -- con "null" (\v -> cps $ run nullM >>= writeB v),
  -- con "inl" (\x -> cps $ symbolic x >>= run . inlM),
  con "add" (\x -> cps $ symbolic x >>= run . inrM),
  con "remove" (cps $ run outlM),
  -- con "outr" (cps $ run outrM),
- con "front" (\v -> cps $ run peeklM >>= writeV v) ]
+ con "front" (\v -> cps $ run peeklM >>= write v) ]
  -- con "peekr" (\v -> cps $ run peekrM >>= writeV v) ]
 
 noRebinding :: Term Symbol -> Bool

@@ -14,7 +14,7 @@ results: Examples
 		echo $(test): &&\
 		(./Examples $(test) | grep "== equations ==" -B 0 -A 9999 | sed 's/^/  /') && echo && ) true) | tee $@
 
-bools nats lists heaps arrays comp queues pretty regex queuesM: Examples
+bools nats lists heaps arrays comp queues pretty regex queuesM arraysM: Examples
 	zsh -i -c "bench ./Examples $@"
 
 Examples: *.hs
