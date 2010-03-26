@@ -14,7 +14,7 @@ import System
 import System.Random
 import Control.Arrow
 import Control.Monad
-import Control.Monad.State
+import Control.Monad.State.Strict
 import PrettyPrinting
 import Regex hiding (State, run)
 import qualified Regex
@@ -172,7 +172,7 @@ examples = [
  ("heaps", (base ++ bools ++ lists ++ heaps, const True, about ["heaps"])),
  ("arrays", (base ++ arrays, const True, allOfThem)),
  ("comp", (base ++ comp, const True, allOfThem)),
- ("queues", (base ++ queues, const True, about ["queues"])),
+ ("queues", (base ++ bools ++ queues, const True, about ["queues"])),
  ("queuesM", (queuesM, noRebinding, about ["queuesM"])),
  ("pretty", (base ++ nats ++ pretty, const True, about ["pretty"])),
  ("regex", (regex, const True, allOfThem))
@@ -319,6 +319,7 @@ peeklM = gets peekl
 peekrM = gets peekr
 
 queues = describe "queues" [
+ var "q" (Queue [] []),
  con "new" new,
  con "null" nullQ,
  con "inl" inl,
@@ -362,13 +363,13 @@ instance Classify Var where
 
   validSubstitution _ s = nubSort (map snd s) == Data.List.sort (map snd s)
 
-type Vars a = (a, a, a)
-read X (x, _, _) = x
-read Y (_, y, _) = y
-read Z (_, _, z) = z
-write X x (_, y, z) = (x, y, z)
-write Y y (x, _, z) = (x, y, z)
-write Z z (x, y, _) = (x, y, z)
+type Vars a = (Maybe a, Maybe a, Maybe a)
+read X (Just x, _, _) = x
+read Y (_, Just y, _) = y
+read Z (_, _, Just z) = z
+write X x (Nothing, y, z) = (Just x, y, z)
+write Y y (x, Nothing, z) = (x, Just y, z)
+write Z z (x, y, Nothing) = (x, y, Just z)
 
 newtype Symbolic a = Symbolic ((Vars Bool, Vars Int) -> a) deriving Typeable
 
@@ -414,7 +415,7 @@ queuesM = describe "queuesM" [
  -- con "return" (return :: Bool -> QueueProg Bool),
  con "return" (\x v -> symbolic x >>= writeV v),
  var "k" (undefined :: QueueProg ()),
- con "empty" (Stop . (cps $ run newM)),
+ con "empty" ((cps $ run newM)),
  -- con "null" (\v -> cps $ run nullM >>= writeB v),
  -- con "inl" (\x -> cps $ symbolic x >>= run . inlM),
  con "add" (\x -> cps $ symbolic x >>= run . inrM),

@@ -9,6 +9,7 @@ import Data.List
 import Data.Ord
 import Data.Typeable
 import qualified Data.Map as Map
+import Data.Map(Map)
 import System.IO
 import System.Random
 import Text.Printf
@@ -122,20 +123,24 @@ xks         `merge` []  = xks
   | x == y    = (x, k `min` n) : (xks `merge` yns)
   | otherwise = (y,n) : (((x,k):xks) `merge` yns)
 
-consequences :: Context -> Int -> [(Int, Int, TypeRep)] -> [Symbol] -> (Term Int, Term Int) -> [(Term Int, Term Int)]
-consequences ctx d univ rigid (t, u) = cons1 t u `mplus` cons1 u t
+consequences :: (Term Symbol -> Bool) -> Context -> Int -> [(Int, Int, TypeRep)] -> Map Int (Term Symbol) -> [Symbol] -> (Term Int, Term Int) -> [(Term Int, Term Int)]
+consequences p ctx d univ univMap rigid (t, u) = cons1 t u `mplus` cons1 u t
     where cons1 t u = do
             s <- mapM substs [ (v,d) | (v, d) <- varDepths d t, v `notElem` rigid ]
             s' <- case rigid of
                     [] -> [[]]
                     [i, j] -> [[(i, Const (label j)), (j, Const (label i))], []]
             guard (ok (s ++ s'))
-            return (subst (s ++ s') t, subst (s ++ s') u)
+            let t' = subst (s ++ s') t
+                u' = subst (s ++ s') u
+            guard (p (unflatten t') && p (unflatten u'))
+            return (t', u')
           substs (v, d) = [ (v, Const s) | (_, s, ty) <- takeWhile (\(d', _, _) -> d' <= d) univ, ty == symbolType v ]
           ok s = all okAtType (partitionBy (show . symbolType . fst) s)
           okAtType s@((v,_):_) =
             case symbolClass v of
-              Data x -> validSubstitution x (map (id *** mapConsts (ctx !!)) s)
+              Data x -> validSubstitution x (map (id *** unflatten) s)
+          unflatten t = joinConsts (mapConsts (\s -> Map.findWithDefault (error ("not in map: " ++ show s ++ ", " ++ show univMap)) s univMap) t)
 
 unify (x, y) = do
   x' <- flatten x
@@ -151,35 +156,40 @@ flatten (App t u) = do
 
 killSymbols = mapConsts label
 
-prune1 :: Context -> Int -> [(Int, Int, TypeRep)] -> [Symbol] -> [(Term Symbol, Term Symbol)] -> CC [(Term Symbol, Term Symbol)]
-prune1 ctx d univ rigid es = fmap snd (runWriterT (mapM_ (consider univ) es))
+prune1 :: (Term Symbol -> Bool) -> Context -> Int -> [(Int, Int, TypeRep)] -> Map Int (Term Symbol) -> [Symbol] -> [(Term Symbol, Term Symbol)] -> CC [(Term Symbol, Term Symbol)]
+prune1 p ctx d univ univMap rigid es = fmap snd (runWriterT (mapM_ (consider univ) es))
     where consider univ (t, u) = do
             b <- lift (canDerive t u)
             when (not b) $ do
               tell [(t, u)]
-              lift (mapM_ unify (consequences ctx d univ rigid (killSymbols t, killSymbols u)))
-{-
-prune2 :: Int -> [(Int, Int, TypeRep)] -> [(Term Symbol, Term Symbol)] -> [(Term Symbol, Term Symbol)] -> CC () [(Term Symbol, Term Symbol)]
-prune2 d univ committed [] = return committed
-prune2 d univ committed ((t,u):es) = do
-  b <- frozen $ do
-         forM_ (committed ++ es) $ \(t, u) -> consequences d univ (killSymbols t, killSymbols u)
-         canDerive t u
-  if b then prune2 d univ committed es
-       else prune2 d univ ((t,u):committed) es
--}
-loadUniv :: [Term Symbol] -> CC [(Int, Int, TypeRep)]
-loadUniv univ = fmap (sortBy (comparing (\(d,_,_) -> d))) (mapM f univ)
+              lift (mapM_ unify (consequences p ctx d univ univMap' rigid (killSymbols t, killSymbols u)))
+          univMap' = foldr (\s -> Map.insert (label s) (sym s)) univMap ctx
+
+prune2 :: (Term Symbol -> Bool) -> Context -> Int -> [(Int, Int, TypeRep)] -> Map Int (Term Symbol) -> [(Term Symbol, Term Symbol)] -> [(Term Symbol, Term Symbol)] -> [(Term Symbol, Term Symbol)]
+prune2 p ctx d univ univMap committed [] = reverse committed
+prune2 p ctx d univ univMap committed ((t,u):es) | derivable = prune2 p ctx d univ univMap committed es
+                                                 | otherwise = prune2 p ctx d univ univMap ((t,u):committed) es
+  where univMap' = foldr (\s -> Map.insert (label s) (sym s)) univMap ctx
+        derivable =
+          runCCctx ctx $ do
+            forM_ (committed ++ es) $ \(t, u) -> mapM_ unify (consequences p ctx d univ univMap' [] (killSymbols t, killSymbols u))
+            canDerive t u
+
+loadUniv :: [Term Symbol] -> CC ([(Int, Int, TypeRep)], Map Int (Term Symbol))
+loadUniv univ = fmap ((sortBy (comparing (\(d,_,_) -> d)) *** Map.fromList) . unzip . map distr) (mapM f univ)
     where f t = do
             t' <- flatten (killSymbols t)
-            return (depth t, t', termType t)
+            return (depth t, t', termType t, t)
+          distr (t@(d,x,ty,u)) = ((d, x, ty), (x, u))
 
-prune :: Context -> Int -> [Term Symbol] -> [(Term Symbol, Term Symbol)] -> [(Condition, [(Term Symbol, Term Symbol)])] -> [(Condition, Term Symbol, Term Symbol)]
-prune ctx d univ0 es ess = runCCctx ctx $ do
-  univ <- loadUniv univ0
-  es' <- fmap (map (\(t, u) -> (Always, t, u))) (prune1 ctx d univ [] es)
-  ess' <- mapM (\(cond, es) -> fmap (map (\(t, u) -> (cond, t, u))) (frozen (prune1 ctx d univ (condVars cond) es))) ess
-  return (es' ++ concat ess')
+prune :: (Term Symbol -> Bool) -> Context -> Int -> [Term Symbol] -> [(Term Symbol, Term Symbol)] -> [(Condition, [(Term Symbol, Term Symbol)])] -> [(Condition, Term Symbol, Term Symbol)]
+prune p ctx d univ0 es ess = runCCctx ctx $ do
+  (univ, univMap) <- loadUniv univ0
+  es' <- prune1 p ctx d univ univMap [] es
+  -- let es'' = prune2 p ctx d univ univMap [] es'
+  let es'' = es'
+  ess' <- mapM (\(cond, es) -> fmap (map (\(t, u) -> (cond, t, u))) (frozen (prune1 p ctx d univ univMap (condVars cond) es))) ess
+  return ([ (Always, t, u) | (t, u) <- es'' ] ++ concat ess')
 
 condVars (a :/= b) = [a, b]
 condVars Always = []
@@ -262,7 +272,7 @@ laws depth ctx0 p p' = do
   putStrLn "== equations =="
   let interesting (_, x, y) = p' x || p' y
       conds = [ i :/= j | (i:j:_) <- partitionBy (show . symbolType) (filter (\s -> typ s == TVar) ctx) ]
-      pruned = filter interesting (prune ctx depth univ (eqs Always) [ (cond, eqs cond) | cond <- conds ])
+      pruned = filter interesting (prune p ctx depth univ (eqs Always) [ (cond, eqs cond) | cond <- conds ])
   sequence_
        [ putStrLn (show i ++ ": " ++ concat [ show x ++ "/=" ++ show y ++ " => " | x :/= y <- [cond] ] ++ show y ++ " == " ++ show x)
        | (i, (cond, y,x)) <- zip [1..] pruned
@@ -282,7 +292,7 @@ test p depth ctx seeds base = do
   printf "%d terms, " (length (concat cs0))
   let evals = [ toValue . eval (memoSym ctx ctxFun) | (ctxFun, toValue) <- map useSeed seeds ]
       conds = map (\f -> satisfied (f . Const)) evals
-      cs1 = evaluate (take 100 (zip evals conds)) (pack cs0)
+      cs1 = evaluate (take 1000 (zip evals conds)) (pack cs0)
   printf "%d classes, %d raw equations.\n"
          (length (unpack cs1))
          (sum (map (subtract 1 . length) (unpack cs1)))

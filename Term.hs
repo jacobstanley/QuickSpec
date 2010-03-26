@@ -79,6 +79,11 @@ mapConsts f (Var v) = Var v
 mapConsts f (Const c) = Const (f c)
 mapConsts f (App t u) = App (mapConsts f t) (mapConsts f u)
 
+joinConsts :: Term (Term a) -> Term a
+joinConsts (Var v) = Var v
+joinConsts (Const t) = t
+joinConsts (App t u) = App (joinConsts t) (joinConsts u)
+
 mapVars :: (Symbol -> Symbol) -> Term c -> Term c
 mapVars f (Const k) = Const k
 mapVars f (Var v)   = Var (f v)
@@ -238,6 +243,10 @@ instance Classify Bool where
 instance Classify Int where
   type Value Int = Int
   evaluate = return
+
+instance Classify a => Classify (Maybe a) where
+  type Value (Maybe a) = Maybe (Value a)
+  evaluate = evalMap fmap
 
 instance Classify a => Classify [a] where
   type Value [a] = [Value a]
