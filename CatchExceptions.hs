@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP,ScopedTypeVariables #-}
+{-# LANGUAGE CPP,ScopedTypeVariables,PatternSignatures #-}
 module CatchExceptions(catchExceptions) where
 
 import Prelude hiding (catch)
