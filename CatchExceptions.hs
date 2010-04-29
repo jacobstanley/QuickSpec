@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-deprecated-flags #-}
 {-# LANGUAGE CPP,ScopedTypeVariables,PatternSignatures #-}
 module CatchExceptions(catchExceptions) where
 
