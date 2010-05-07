@@ -214,8 +214,8 @@ main = do
                [] -> "bools"
                [x] -> x
       Just (cons, p, p') = lookup test examples
-  laws 4 cons p p'
-  congruenceCheck 3 cons p
+  laws 3 cons p p'
+  --congruenceCheck 3 cons p
 
 newtype Index = Index Int deriving (Eq, Ord, CoArbitrary, Random, Num, Show, Typeable)
 instance Arbitrary Index where arbitrary = choose (0, 15)
