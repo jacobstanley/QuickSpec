@@ -99,7 +99,7 @@ unpack (Classes _ rss) = concatMap unpack1 rss
   where unpack1 (TestResults xs vss) = map (map fst) (partitionBy snd (zip xs (transpose vss)))
 
 parRefine :: ([a] -> [[a]]) -> ([[a]] -> [[a]])
-parRefine f xs = parFlatMap (parList r0) f xs
+parRefine f xs = concat (parMap (parList r0) f xs)
 --parRefine = concatMap
 
 partitionBy :: Ord b => (a -> b) -> [a] -> [[a]]
@@ -292,7 +292,7 @@ test p depth ctx seeds base = do
   printf "%d terms, " (length (concat cs0))
   let evals = [ toValue . eval (memoSym ctx ctxFun) | (ctxFun, toValue) <- map useSeed seeds ]
       conds = map (\f -> satisfied (f . Const)) evals
-      cs1 = evaluate (take 1000 (zip evals conds)) (pack cs0)
+      cs1 = evaluate (take 200 (zip evals conds)) (pack cs0)
   printf "%d classes, %d raw equations.\n"
          (length (unpack cs1))
          (sum (map (subtract 1 . length) (unpack cs1)))

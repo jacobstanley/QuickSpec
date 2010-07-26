@@ -152,8 +152,8 @@ load :: Context -> Int -> [Formula] -> [Term.Term Term.Symbol] -> CC [(Int, Int,
 load ctx d fs univ = do
   univ' <- loadUniv univ
   forM_ fs $ \f ->
-    mapM_ unify (consequences d univ' [] (convert f (left f), convert f (right f)))
-  return univ'
+    mapM_ unify (consequences (const True) ctx d (fst univ') undefined [] (convert f (left f), convert f (right f)))
+  return (fst univ')
       where convert f t = killSymbols (toQuickSpec ctx (vars f) t)
 
 allTerms :: Ord a => Context -> Int -> (Term.Term Term.Symbol -> a) -> [Term.Term Term.Symbol]
@@ -170,7 +170,7 @@ check d prob = or $ runCC (length ctx) $ trace (show (length univ)) $ do
                        u = killSymbols (toQuickSpec ctx (vars f) (right f))
                    orM [ do t'' <- flatten t'
                             u'' <- flatten u'
-                            t'' =?= u'' | (t', u') <- consequences d univ' [] (t, u) ]
+                            t'' =?= u'' | (t', u') <- consequences (const True) ctx d univ' undefined [] (t, u) ]
   where orM [] = return False
         orM (x:xs) = do
           b <- x

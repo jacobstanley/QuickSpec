@@ -28,8 +28,9 @@ bools = describe "bools" [
  var "y" False,
  var "z" False,
  con "&&" (&&),
- con "||" (||),
- con "not" not,
+-- con "||" (||),
+-- con "not" not,
+ con "=>" (\x y -> not x || y),
  con "true" True,
  con "false" False
  ]
@@ -355,7 +356,7 @@ nullQ _ = False
 
 inl x (Queue xs ys) = Queue (x:xs) ys
 inr y (Queue xs ys) = Queue xs (y:ys)
--- outl (Queue (x:xs) ys) = Queue xs ys
+--outl (Queue (x:xs) ys) = Queue xs ys
 outl = withLeft (\(x:xs) ys -> Queue xs ys)
 outr = withRight (\xs (y:ys) -> Queue xs ys)
 peekl = withLeft (\(x:xs) ys -> x)
@@ -403,10 +404,10 @@ queues = describe "queues" [
  con "null" nullQ,
  con "inl" inl,
  con "inr" inr,
- con "outl" outl,
- con "outr" outr,
- con "peekl" peekl,
- con "peekr" peekr
+ con "outl" outl
+-- con "outr" outr,
+-- con "peekl" peekl,
+-- con "peekr" peekr
  ]
 
 newtype Stop a = Stop a deriving Typeable
@@ -507,6 +508,7 @@ queuesM = describe "queuesM" [
  con "return" (\x v -> symbolic (x :: Symbolic Int) >>= write v :: Prog QueueM ()),
  var "k" (undefined :: Prog QueueM ()),
  con "empty" ((cps $ run newM)),
+ con "isnotempty" (cps $ run (do Queue xs ys <- get; (_:_) <- return (xs++ys); return () :: QueueM ())),
  -- con "null" (\v -> cps $ run nullM >>= writeB v),
  -- con "inl" (\x -> cps $ symbolic x >>= run . inlM),
  con "add" (\x -> cps $ symbolic x >>= run . inrM),
