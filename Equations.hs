@@ -245,16 +245,13 @@ laws depth ctx0 p p' = do
   hSetBuffering stdout NoBuffering
   let ctx = zipWith relabel [0..] (ctx0 ++ undefinedSyms ctx0)
   putStrLn "== API =="
+  let putSignature ts = mapM_ putTerms (partitionBy (show . termType) ts)
+       where putTerms ts@(t:_) =
+               putStrLn (intercalate ", " (map show ts) ++ " :: " ++ show (termType t))
   putStrLn "-- functions"
-  sequence_ [ putStrLn (show (Const elt) ++ " :: " ++ show (symbolType elt))
-            | elt <- ctx
-            , typ elt == TConst && not (isUndefined elt)
-            ]
+  putSignature [ Const elt | elt <- ctx, typ elt == TConst && not (isUndefined elt) ]
   putStrLn "-- variables"
-  sequence_ [ putStrLn (name elt ++ " :: " ++ show (symbolType elt))
-            | elt <- ctx
-            , typ elt == TVar && not (isUndefined elt)
-            ]
+  putSignature [ Var elt | elt <- ctx, typ elt == TVar && not (isUndefined elt) ]
   seeds <- genSeeds
   putStrLn "== classes =="
   cs <- tests p (take 1) depth ctx seeds
