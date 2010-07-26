@@ -11,8 +11,8 @@ import Term
 -- The Ord instance can be a partial order, so x<=y,y<=x can both be False.
 -- But the Eq instance ought to be valid.
 class Ord a => Family a where
-  intersect :: a -> a -> a
-  app :: a -> a -> a
+  intersect :: a -> a -> Maybe a
+  app :: a -> a -> Maybe a
   unapp :: a -> [(a, a)]
 
 class Ord a => WellFounded a where
@@ -29,20 +29,25 @@ prop_lesser1 x = all (<= x) (lesser x)
 prop_lesser2 :: (WellFounded a, Arbitrary a) => a -> a -> Property
 prop_lesser2 x y = x <= y ==> x `elem` lesser y
 
-prop_intersect :: (Family a, WellFounded a, Arbitrary a) => a -> a -> Bool
-prop_intersect x y = all (x `intersect` y >=) lxy &&
-                     x `intersect` y `elem` lxy
+prop_intersect :: (Family a, WellFounded a, Arbitrary a) => a -> a -> Property
+prop_intersect x y =
+  case x `intersect` y of
+    Nothing -> False ==> True
+    Just ixy -> property (all (ixy >=) lxy && ixy `elem` lxy)
   where lxy = lesser x `L.intersect` lesser y
 
-prop_app :: (Family a, Arbitrary a) => a -> a -> Bool
-prop_app f x = f <= f `app` x && x <= f `app` x
+prop_app :: (Family a, Arbitrary a) => a -> a -> Property
+prop_app f x =
+  case f `app` x of
+    Nothing -> False ==> True
+    Just fx -> property (f <= fx && x <= fx)
 
 test :: forall a. (Family a, WellFounded a, Arbitrary a, Show a) => a -> IO ()
 test x = do
   quickCheck (prop_lesser1 :: a -> Bool)
   quickCheck (prop_lesser2 :: a -> a -> Property)
-  quickCheck (prop_intersect :: a -> a -> Bool)
-  quickCheck (prop_app :: a -> a -> Bool)
+  quickCheck (prop_intersect :: a -> a -> Property)
+  quickCheck (prop_app :: a -> a -> Property)
 
 -- Instances.
 
@@ -52,8 +57,8 @@ instance Arbitrary Depth where
   arbitrary = choose (0, 4)
 
 instance Family Depth where
-  intersect = min
-  d1 `app` d2 = d1 `max` (d2+1)
+  x `intersect` y = Just (x `min` y)
+  d1 `app` d2 = Just (d1 `max` (d2+1))
   unapp n = [(d1, d2) | d1 <- [0..n], d2 <- [0..n-1]]
 
 instance WellFounded Depth where
@@ -67,8 +72,8 @@ instance Arbitrary Size where
   arbitrary = choose (0, 10)
 
 instance Family Size where
-  intersect = min
-  app = (+)
+  x `intersect` y = Just (x `min` y)
+  x `app` y = Just (x + y)
   unapp n = [(d1, d2) | d1 <- [0..n-1], let d2 = n - d1]
 
 instance WellFounded Size where
@@ -87,8 +92,8 @@ instance (Ord a, Ord b) => Ord (Both a b) where
   Both x y <= Both x' y' = x <= x' && y <= y'
 
 instance (Family a, Family b) => Family (Both a b) where
-  Both x1 x2 `intersect` Both y1 y2 = Both (x1 `intersect` y1) (x2 `intersect` y2)
-  Both f1 f2 `app` Both x1 x2 = Both (f1 `app` x1) (f2 `app` x2)
+  Both x1 x2 `intersect` Both y1 y2 = liftM2 Both (x1 `intersect` y1) (x2 `intersect` y2)
+  Both f1 f2 `app` Both x1 x2 = liftM2 Both (f1 `app` x1) (f2 `app` x2)
   -- FIXME is this right?
   unapp (Both y1 y2) = [(Both f1 f2, Both x1 x2) | (f1, x1) <- unapp y1, (f2, x2) <- unapp y2]
 
