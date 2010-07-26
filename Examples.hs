@@ -18,6 +18,9 @@ import Control.Monad
 import Control.Monad.State.Strict
 import PrettyPrinting
 import Regex hiding (State, run)
+import qualified TinyWM as T
+import qualified TinyWMProperties as TP
+import qualified Data.Map as M
 import qualified Regex
 
 bools = describe "bools" [
@@ -32,9 +35,12 @@ bools = describe "bools" [
  ]
 
 base = [
- var "x" int,
- var "y" int,
- var "z" int ]
+ var "x" (undefined :: Elem),
+ var "y" (undefined :: Elem),
+ var "z" (undefined :: Elem),
+ var "i" int,
+ var "j" int,
+ var "k" int ]
   where int :: Int
         int = undefined
 
@@ -42,18 +48,18 @@ lists = describe "lists" [
  var "xs" list,
  var "ys" list,
  var "zs" list,
- con "++" ((++) :: [Int] -> [Int] -> [Int]),
- con "reverse" (reverse :: [Int] -> [Int]),
- con "head" (head :: [Int] -> Int),
- con "tail" (tail :: [Int] -> [Int]),
- con ":" ((:) :: Int -> [Int] -> [Int]),
- con "[]" ([] :: [Int]),
- con "sort" (Data.List.sort :: [Int] -> [Int]),
- con "mergeL" mergeL,
- con "unit" (\x -> [x] :: [Int]),
- con "insertL" (Data.List.insert :: Int -> [Int] -> [Int]),
- con "null" (null :: [Int] -> Bool)]
-  where list :: [Int]
+ con "++" ((++) :: [Elem] -> [Elem] -> [Elem]),
+ con "reverse" (reverse :: [Elem] -> [Elem]),
+ con "head" (head :: [Elem] -> Elem),
+ con "tail" (tail :: [Elem] -> [Elem]),
+ con ":" ((:) :: Elem -> [Elem] -> [Elem]),
+ con "[]" ([] :: [Elem]),
+-- con "sort" (Data.List.sort :: [Elem] -> [Elem]),
+-- con "mergeL" mergeL,
+ con "unit" (\x -> [x] :: [Elem])]
+-- con "insertL" (Data.List.insert :: Int -> [Int] -> [Int]),
+-- con "null" (null :: [Int] -> Bool)]
+  where list :: [Elem]
         list = undefined
 
 data Monotonic = Monotonic Int (Int -> Int) deriving Typeable
@@ -166,6 +172,38 @@ nats = describe "nats" [
  con "0" (0 :: Int),
  con "1" (1 :: Int) ]
 
+type StackSet = T.StackSet Elem
+
+newtype Elem = Elem Int deriving (Arbitrary, Eq, Ord, Typeable, Show)
+instance Classify Elem where
+  type Value Elem = Elem
+  evaluate = return
+
+instance Classify Ordering where
+  type Value Ordering = Ordering
+  evaluate = return
+
+instance Classify StackSet where
+  type Value StackSet = StackSet
+  evaluate = return
+
+tinywm = describe "tinywm" [
+ con "empty" (T.empty :: Int -> StackSet),
+ con "view" (T.view :: Int -> StackSet -> StackSet),
+ con "peek" (fromJust . T.peek :: StackSet -> Elem),
+ con "rotate" (T.rotate :: Ordering -> StackSet -> StackSet),
+ con "push" (T.push :: Elem -> StackSet -> StackSet),
+ con "shift" (T.shift :: Int -> StackSet -> StackSet),
+ con "insert" (T.insert :: Elem -> Int -> StackSet -> StackSet),
+ con "delete" (T.delete :: Elem -> StackSet -> StackSet),
+ con "index" (T.index :: Int -> StackSet -> [Elem]),
+ var "s" (undefined :: StackSet),
+ con "LT" LT,
+ con "GT" GT,
+ con "EQ" EQ,
+ var "o" (undefined :: Ordering),
+ var "o'" (undefined :: Ordering)]
+
 examples = [
  ("nats", (base ++ nats, const True, allOfThem)),
  ("bools", (base ++ bools, const True, allOfThem)),
@@ -177,7 +215,8 @@ examples = [
  ("queuesM", (queuesM, noRebinding, about ["queuesM"])),
  ("arraysM", (arraysM, noRebinding, about ["arraysM"])),
  ("pretty", (base ++ nats ++ pretty, const True, about ["pretty"])),
- ("regex", (regex, const True, allOfThem))
+ ("regex", (regex, const True, allOfThem)),
+ ("tinywm", (base ++ lists ++ tinywm, const True, about ["tinywm"]))
  ]
 
 regex = [
