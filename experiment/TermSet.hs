@@ -26,10 +26,8 @@ union t1 t2 = Tree { rep = rep t1, rest = rest t1++rep t2:rest t2, testCase = te
                      branches = merge (branches t1) (branches t2) }
   where merge [] ys = ys
         merge xs [] = xs
-        merge (x:xs) (y:ys) | eval (testCase t1) (rep t1) < eval (testCase t2) (rep t2) =
-          x:merge xs (y:ys)
-                            | eval (testCase t1) (rep t1) > eval (testCase t2) (rep t2) =
-          y:merge (x:xs) ys
+        merge (x:xs) (y:ys) | eval (testCase t1) (rep t1) < eval (testCase t2) (rep t2) = x:merge xs (y:ys)
+                            | eval (testCase t1) (rep t1) > eval (testCase t2) (rep t2) = y:merge (x:xs) ys
                             | otherwise = union x y:merge xs ys
 
 partitionBy :: Ord b => (a -> b) -> [a] -> [[a]]
@@ -38,8 +36,8 @@ partitionBy = undefined
 -- Precondition: xs must be sorted.
 test :: TestCase tc a => [tc] -> [a] -> TestingTree tc a
 test _ [] = error "bug: an equivalence class can't be empty"
-test (tc:tcs) xs = Tree { rep = y, rest = ys, testCase = tc, branches = map (test tcs) (tail bs) }
-  where ((y:ys):bs) = partitionBy (eval tc) xs
+test (tc:tcs) (x:xs) = Tree { rep = x, rest = xs, testCase = tc, branches = map (test tcs) bs }
+  where bs = partitionBy (eval tc) (x:xs)
 
 fringe :: TestingTree tc a -> Int
 fringe = maxNumber . cutOff 0
