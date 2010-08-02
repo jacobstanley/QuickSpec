@@ -1,6 +1,8 @@
 {-# LANGUAGE FlexibleContexts, MultiParamTypeClasses, TypeFamilies, TupleSections, ImplicitParams #-}
 module TestTree where
 
+import Utils
+
 -- This structure supports class refinement, union etc.
 -- Invariant: branches is sorted by comparing (eval testCase . rep).
 data TestTree tc a = Tree { rep :: a, rest :: [a], testCase :: tc, branches :: [TestTree tc a] }
@@ -17,9 +19,6 @@ union t1 t2 = Tree { rep = rep t1, rest = rest t1++rep t2:rest t2, testCase = te
         merge (x:xs) (y:ys) | eval (testCase t1) (rep t1) < eval (testCase t2) (rep t2) = x:merge xs (y:ys)
                             | eval (testCase t1) (rep t1) > eval (testCase t2) (rep t2) = y:merge (x:xs) ys
                             | otherwise = union x y:merge xs ys
-
-partitionBy :: Ord b => (a -> b) -> [a] -> [[a]]
-partitionBy = undefined
 
 -- Precondition: xs must be sorted.
 test :: TestCase tc a => [tc] -> [a] -> TestTree tc a
