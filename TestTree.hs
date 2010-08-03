@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts, MultiParamTypeClasses, TypeFamilies #-}
 module TestTree where
 
+import Data.List(sort)
 import Data.Ord
 import Utils
 
@@ -21,24 +22,29 @@ instance TestCase tc a => Eq (TestTree tc a) where
 instance TestCase tc a => Ord (TestTree tc a) where
   compare = comparing (\t -> eval (testCase t) (rep t))
 
-union :: TestCase tc a => TestTree tc a -> TestTree tc a -> TestTree tc a
--- FIXME: make sure that rep always becomes the one we want, including
--- in "test".
-union t1 t2 = Tree { rep = rep t1, rest = rest t1++rep t2:rest t2, testCase = testCase t1,
-                     branches = merge (branches t1) (branches t2) }
-  where [] `merge` ys = ys
-        xs `merge` [] = xs
-        (x:xs) `merge` (y:ys) =
+tree :: Ord a => [a] -> tc -> [TestTree tc a] -> TestTree tc a
+tree [] _ _ = error "bug: an equivalence class can't be empty"
+tree xs tc bs = Tree { rep = y, rest = ys, testCase = tc, branches = bs }
+  where y:ys = sort xs
+
+terms :: TestTree tc a -> [a]
+terms Tree{rep = x, rest = xs} = x:xs
+
+union :: (Ord a, TestCase tc a) => TestTree tc a -> TestTree tc a -> TestTree tc a
+t1 `union` t2 = tree (merge const (terms t1) (terms t2)) (testCase t1) (merge union (branches t1) (branches t2))
+  where merge _ [] ys = ys
+        merge _ xs [] = xs
+        merge f (x:xs) (y:ys) =
           case x `compare` y of
-            LT -> x:merge xs (y:ys)
-            GT -> y:merge (x:xs) ys
-            EQ -> x `union` y:xs `merge` ys
+            LT -> x:merge f xs (y:ys)
+            GT -> y:merge f (x:xs) ys
+            EQ -> f x y:merge f xs ys
 
 -- Precondition: xs must be sorted.
-test :: TestCase tc a => [tc] -> [a] -> TestTree tc a
-test _ [] = error "bug: an equivalence class can't be empty"
-test (tc:tcs) (x:xs) = Tree { rep = x, rest = xs, testCase = tc, branches = map (test tcs) bs }
-  where bs = partitionBy (eval tc) (x:xs)
+test :: (Ord a, TestCase tc a) => [tc] -> [a] -> TestTree tc a
+test [] xs = error "bug: ran out of test cases"
+test (tc:tcs) xs = tree xs tc (map (test tcs) bs)
+  where bs = partitionBy (eval tc) xs
 
 -- A TestTree with finite depth, represented as a TestTree where some
 -- nodes have no branches. Since this breaks one of the TestTree
