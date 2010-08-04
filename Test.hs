@@ -1,4 +1,6 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleInstances #-}
+module Main where
+
 import TestTree
 import Control.Monad
 import Text.Printf
