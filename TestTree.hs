@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts, MultiParamTypeClasses, TypeFamilies #-}
 module TestTree where
 
+import Prelude hiding (filter)
 import Data.List(sort)
 import Data.Ord
 import Utils
@@ -46,6 +47,12 @@ test :: (Ord a, Eval a) => [TestCase a] -> [a] -> TestTree a
 test [] xs = error "bug: ran out of test cases"
 test (tc:tcs) xs = tree xs tc (map (test tcs) bs)
   where bs = partitionBy (eval tc) xs
+
+-- Ignore some testcases (useful for conditional equations?)
+filter :: (Ord a, Eval a) => (TestCase a -> Bool) -> TestTree a -> TestTree a
+filter p t | p (testCase t) = t { branches = bs }
+           | otherwise = foldr1 union bs
+  where bs = map (filter p) (branches t)
 
 -- A TestTree with finite depth, represented as a TestTree where some
 -- nodes have no branches. Since this breaks one of the TestTree
