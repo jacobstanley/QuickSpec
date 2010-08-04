@@ -28,9 +28,9 @@ bools = describe "bools" [
  var "y" False,
  var "z" False,
  con "&&" (&&),
--- con "||" (||),
--- con "not" not,
- con "=>" (\x y -> not x || y),
+ con "||" (||),
+ con "not" not,
+-- con "=>" (\x y -> not x || y),
  con "true" True,
  con "false" False
  ]
