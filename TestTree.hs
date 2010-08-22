@@ -5,10 +5,13 @@ import Prelude hiding (filter)
 import Data.List(sort)
 import Data.Ord
 import Utils
+import Control.Exception(assert)
 
--- Invariant: branches is sorted.
--- Always an infinite structure, and branches t is always a refinement
--- of t (possibly [t]).
+-- Invariant: the children of a TestTree are sorted according to the
+-- parent's testCase. We exploit this in defining merge.
+-- 
+-- A TestTree is always infinite, and branches t is always a
+-- refinement of t (it may be trivial, so that length (branches t) == 1).
 data TestTree a = Tree { rep :: a, rest :: [a], testCase :: TestCase a, branches :: [TestTree a] }
 
 class Ord (Result a) => Eval a where
@@ -16,36 +19,43 @@ class Ord (Result a) => Eval a where
   type Result a
   eval :: TestCase a -> a -> Result a
 
--- We need to use this definition of equality for the definition of
--- union below to make sense.
-instance Eval a => Eq (TestTree a) where
-  t1 == t2 = eval (testCase t1) (rep t1) == eval (testCase t2) (rep t2)
-
-instance Eval a => Ord (TestTree a) where
-  compare = comparing (\t -> eval (testCase t) (rep t))
-
-tree :: Ord a => [a] -> TestCase a -> [TestTree a] -> TestTree a
+-- Precondition: xs must be sorted, and bs must be sorted according to
+-- the TestCase.
+tree :: (Ord a, Eval a) => [a] -> TestCase a -> [TestTree a] -> TestTree a
 tree [] _ _ = error "bug: an equivalence class can't be empty"
-tree xs tc bs = Tree { rep = y, rest = ys, testCase = tc, branches = bs }
-  where y:ys = sort xs
+tree (x:xs) tc bs =
+  assert (isSortedBy (eval tc . rep) bs) $
+  assert (isSorted xs) $
+    Tree { rep = x, rest = xs, testCase = tc, branches = bs }
 
 terms :: TestTree a -> [a]
 terms Tree{rep = x, rest = xs} = x:xs
 
 union :: (Ord a, Eval a) => TestTree a -> TestTree a -> TestTree a
-t1 `union` t2 = tree (merge const (terms t1) (terms t2)) (testCase t1) (merge union (branches t1) (branches t2))
-  where merge _ [] ys = ys
-        merge _ xs [] = xs
-        merge f (x:xs) (y:ys) =
-          case x `compare` y of
-            LT -> x:merge f xs (y:ys)
-            GT -> y:merge f (x:xs) ys
-            EQ -> f x y:merge f xs ys
+t1 `union` t2 =
+  tree (merge const id (terms t1) (terms t2)) (testCase t1)
+       (merge union (eval (testCase t1) . rep) (branches t1) (branches t2))
 
--- Precondition: xs must be sorted.
+merge :: Ord b => (a -> a -> a) -> (a -> b) -> [a] -> [a] -> [a]
+merge _ _ [] ys = ys
+merge _ _ xs [] = xs
+merge f c (x:xs) (y:ys) =
+  case comparing c x y of
+    LT -> x:merge f c xs (y:ys)
+    GT -> y:merge f c (x:xs) ys
+    EQ -> f x y:merge f c xs ys
+
 test :: (Ord a, Eval a) => [TestCase a] -> [a] -> TestTree a
-test [] xs = error "bug: ran out of test cases"
-test (tc:tcs) xs = tree xs tc (map (test tcs) bs)
+test tcs xs = test' tcs (sort xs)
+
+-- Precondition: the list of terms must be sorted.
+test' :: (Ord a, Eval a) => [TestCase a] -> [a] -> TestTree a
+test' [] xs = error "bug: ran out of test cases"
+test' (tc:tcs) xs = assert (isSorted xs) $
+                   -- Too clever by half trick (hence the above assert):
+                   -- sort is stable, so each b <- bs is sorted
+                   -- according to the usual Ord order.
+                   tree xs tc (map (test' tcs) bs)
   where bs = partitionBy (eval tc) xs
 
 -- Ignore some testcases (useful for conditional equations?)
@@ -74,3 +84,6 @@ classes :: TestResults a -> [[a]]
 classes (Results t) = aux t
   where aux Tree{rep = x, rest = xs, branches = []} = [x:xs]
         aux Tree{branches = bs} = concatMap aux bs
+
+reps :: TestResults a -> [a]
+reps = map head . classes
