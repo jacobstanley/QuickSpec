@@ -5,7 +5,8 @@ module TestTree(Eval(..), TestTree, terms, union, test,
 import Prelude hiding (filter)
 import Data.List(sort)
 import Data.Ord
-import Utils
+import Utils(isSorted, isSortedBy)
+import GHC.Exts(groupWith)
 import Control.Exception(assert)
 
 -- Invariant: the children of a TestTree are sorted according to the
@@ -38,13 +39,14 @@ t1 `union` t2 =
        (merge union (eval (testCase t1) . rep) (branches t1) (branches t2))
 
 merge :: Ord b => (a -> a -> a) -> (a -> b) -> [a] -> [a] -> [a]
-merge _ _ [] ys = ys
-merge _ _ xs [] = xs
-merge f c (x:xs) (y:ys) =
-  case comparing c x y of
-    LT -> x:merge f c xs (y:ys)
-    GT -> y:merge f c (x:xs) ys
-    EQ -> f x y:merge f c xs ys
+merge f c = aux
+  where aux [] ys = ys
+        aux xs [] = xs
+        aux (x:xs) (y:ys) =
+          case comparing c x y of
+            LT -> x:aux xs (y:ys)
+            GT -> y:aux (x:xs) ys
+            EQ -> f x y:aux xs ys
 
 test :: (Ord a, Eval a) => [TestCase a] -> [a] -> TestTree a
 test tcs xs = test' tcs (sort xs)
@@ -57,7 +59,7 @@ test' (tc:tcs) xs = assert (isSorted xs) $
                    -- sort is stable, so each b <- bs is sorted
                    -- according to the usual Ord order.
                    tree xs tc (map (test' tcs) bs)
-  where bs = partitionBy (eval tc) xs
+  where bs = groupWith (eval tc) xs
 
 -- Ignore some testcases (useful for conditional equations?)
 filter :: (Ord a, Eval a) => (TestCase a -> Bool) -> TestTree a -> TestTree a
