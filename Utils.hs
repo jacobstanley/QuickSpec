@@ -12,3 +12,13 @@ isSorted xs = and (zipWith (<=) xs (tail xs))
 
 isSortedBy :: Ord b => (a -> b) -> [a] -> Bool
 isSortedBy f xs = isSorted (map f xs)
+
+merge :: Ord b => (a -> a -> a) -> (a -> b) -> [a] -> [a] -> [a]
+merge f c = aux
+  where aux [] ys = ys
+        aux xs [] = xs
+        aux (x:xs) (y:ys) =
+          case comparing c x y of
+            LT -> x:aux xs (y:ys)
+            GT -> y:aux (x:xs) ys
+            EQ -> f x y:aux xs ys
