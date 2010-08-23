@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts, MultiParamTypeClasses, TypeFamilies #-}
-module TestTree where
+module TestTree(Eval(..), TestTree, terms, union, test,
+               filter, TestResults, cutOff, numTests, classes, reps) where
 
 import Prelude hiding (filter)
 import Data.List(sort)
