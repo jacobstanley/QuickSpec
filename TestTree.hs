@@ -5,8 +5,7 @@ module TestTree(Eval(..), TestTree, terms, union, test,
 import Prelude hiding (filter)
 import Data.List(sort)
 import Data.Ord
-import Utils(isSorted, isSortedBy)
-import GHC.Exts(groupWith)
+import Utils
 import Control.Exception(assert)
 
 -- Invariant: the children of a TestTree are sorted according to the
@@ -59,7 +58,7 @@ test' (tc:tcs) xs = assert (isSorted xs) $
                    -- sort is stable, so each b <- bs is sorted
                    -- according to the usual Ord order.
                    tree xs tc (map (test' tcs) bs)
-  where bs = groupWith (eval tc) xs
+  where bs = partitionBy (eval tc) xs
 
 -- Ignore some testcases (useful for conditional equations?)
 filter :: (Ord a, Eval a) => (TestCase a -> Bool) -> TestTree a -> TestTree a
