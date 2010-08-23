@@ -10,6 +10,7 @@ data Args v a b where
 
 instance Show (Args v a b) where
   show Nil = ""
+  show (Snoc x Nil) = show x
   show (Snoc x as) = show as ++ "," ++ show x
 
 data Term v a = forall b. App { name :: String, fun :: (v -> b), args :: Args v b a }

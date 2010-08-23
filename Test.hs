@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleInstances, TypeOperators #-}
-module Main(main) where
+module Main where
 
 import Data.MemoTrie
 import TestTree
