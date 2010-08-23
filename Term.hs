@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, Rank2Types, TypeFamilies #-}
+{-# LANGUAGE GADTs, Rank2Types, TypeFamilies, FlexibleContexts #-}
 module Term where
 
 import TestTree
@@ -14,6 +14,11 @@ instance Show (Args v a b) where
   show (Snoc x as) = show as ++ "," ++ show x
 
 data Term v a = forall b. App { name :: String, fun :: (v -> b), args :: Args v b a }
+
+class Ord (Observation a) => Observe a where
+  type Context a
+  type Observation a
+  observe :: Context a -> a -> Observation a
 
 instance Eq (Term v a) where
   t1 == t2 = show t1 == show t2
@@ -36,7 +41,9 @@ evalTerm v App { fun = f, args = as } = apply v (f v) as
         apply v f Nil = f
         apply v f (Snoc x as) = apply v f as (evalTerm v x)
 
-instance Ord a => Eval (Term v a) where
-  type Result (Term v a) = a
-  type TestCase (Term v a) = v
-  eval = evalTerm
+-- FIXME: maybe it would be better to have a different ObservedTerm
+-- type and use it in testing instead.
+instance Observe a => Eval (Term v a) where
+  type Result (Term v a) = Observation a
+  type TestCase (Term v a) = (Context a, v)
+  eval (c, v) t = observe c (evalTerm v t)

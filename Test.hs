@@ -24,9 +24,9 @@ trees tcs numTests = f
   where f = memo (cutOff numTests . f')
         base :: Int -> TestTree (Term Val Int)
         base = memo $ \n -> test tcs $ [ sym "0" $ const 0, sym "1" $ const 1,
-                                         sym "x" (\(x, _, _) -> x),
-                                         sym "y" (\(_, y, _) -> y),
-                                         sym "z" (\(_, _, z) -> z) ]
+                                         sym "x" (\(_, (x, _, _)) -> x),
+                                         sym "y" (\(_, (_, y, _)) -> y),
+                                         sym "z" (\(_, (_, _, z)) -> z) ]
         f' :: Int -> TestTree (Term Val Int)
         f' 0 = base 0
         f' (n+1) = base (n+1) `union` test tcs (liftM3 app3 [sym "+" $ const (+), sym "*" $ const (*)] ts ts ++ map (app (sym "-" $ const negate)) ts)
