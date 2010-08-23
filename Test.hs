@@ -22,17 +22,22 @@ allTerms 0 _ = [Var X, Var Y, Var Z, Const 0, Const 1]
 allTerms (n+1) g = allTerms 0 g ++ liftM3 id [Plus, Times] atn atn ++ fmap Neg atn
   where atn = reps (results n g)
 
-trees :: Int -> StdGen -> (Int :->: TestTree IntExpr)
+trees :: Int -> StdGen -> Int -> TestTree IntExpr
 -- Hmm, we can even easily make the sound depth optimisation this
 -- way---just make the code for n+1 tests base itself on the code for
 -- n tests. All we really need is union for that. Plus an operation to
 -- find out what new representatives appear at depth n of the testing
 -- tree.
-trees numTests gen = t
-  where t = trie f
-        f 0 = test allTests [Var X, Var Y, Var Z, Const 0, Const 1]
-        f (n+1) = untrie t 0 `union` test allTests (liftM3 id [Plus, Times] ts ts ++ map Neg ts)
-          where ts = reps (cutOff numTests (untrie t n))
+--
+-- Actually---we currently kill a branch when it hasn't been refined
+-- for 100 steps, in which case the depth optimisation is perfectly
+-- sound! The problematic terms don't get tested any more at higher
+-- depth.
+trees numTests gen = f
+  where f = memo f'
+        f' 0 = test allTests [Var X, Var Y, Var Z, Const 0, Const 1]
+        f' (n+1) = f 0 `union` test allTests (liftM3 id [Plus, Times] ts ts ++ map Neg ts)
+          where ts = reps (cutOff numTests (f n))
         allTests = tests gen
 
 results :: Int -> StdGen -> TestResults IntExpr
@@ -52,7 +57,7 @@ instance Eval IntExpr where
 main = do
   seed <- newStdGen
   let rs = results 2 seed
-      f = untrie (trees 100 seed)
+      f = trees 100 seed
       rs' = cutOff 100 (f 2)
   printf "%d terms, %d classes, %d tests\n" (length (concat (classes rs))) (length (classes rs)) (numTests rs)
   printf "w/ depth optimisation: %d terms, %d classes\n" (length (concat (classes rs'))) (length (classes rs'))
