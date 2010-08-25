@@ -79,6 +79,7 @@ f $$ x = do
 (=:=) :: Int -> Int -> CC Bool
 a =:= b = propagate (a, b)
 
+(=?=) :: Int -> Int -> CC Bool
 t =?= u = liftM2 (==) (rep t) (rep u)
 
 propagate (a, b) = do
@@ -102,7 +103,7 @@ updateUses r r' funUses argUses = do
   modifyFunUse (IntMap.delete r)
   modifyArgUse (IntMap.delete r)
   modifyLookup (IntMap.delete r)
-  forM_ funUses $ \(x, c) -> do
+  forM_ funUses $ \(x, _) -> do
     x' <- rep x
     modifyLookup (delete2 x' r)
   invariant (printf "after deleting %s" (show r))

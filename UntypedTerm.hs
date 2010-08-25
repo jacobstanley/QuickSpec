@@ -11,9 +11,9 @@ args = reverse . revArgs
 instance Ord a => Ord (Term a) where
   compare = comparing stamp
     where stamp t = (depth t, size t, fun t, args t)
-          depth App { revArgs = [] } = 0
+          depth App { revArgs = [] } = 0 :: Int
           depth App { revArgs = ts } = 1 + maximum (map depth ts)
-          size App { revArgs = ts } = 1 + sum (map size ts)
+          size App { revArgs = ts } = 1 + sum (map size ts) :: Int
 
 instance Show a => Show (Term a) where
   show (App { fun = f, revArgs = [] }) = show f

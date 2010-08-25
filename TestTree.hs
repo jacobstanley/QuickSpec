@@ -1,10 +1,9 @@
-{-# LANGUAGE FlexibleContexts, MultiParamTypeClasses, TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts, TypeFamilies #-}
 module TestTree(Eval(..), TestTree, terms, union, test,
                filter, TestResults, cutOff, numTests, classes, reps) where
 
 import Prelude hiding (filter)
 import Data.List(sort)
-import Data.Ord
 import Utils
 import Control.Exception(assert)
 
@@ -55,7 +54,7 @@ test tcs xs = NonNil (test' tcs (sort xs))
 
 -- Precondition: the list of terms must be sorted.
 test' :: (Ord a, Eval a) => [TestCase a] -> [a] -> InnerTestTree a
-test' [] xs = error "bug: ran out of test cases"
+test' [] _ = error "bug: ran out of test cases"
 test' (tc:tcs) xs = assert (isSorted xs) $
                    -- Too clever by half trick (hence the above assert):
                    -- sort is stable, so each b <- bs is sorted
@@ -83,7 +82,7 @@ cutOff _ Nil = Results Nil
 cutOff n (NonNil t) = Results (NonNil (aux n t))
   where aux 0 t = t { branches = [] }
         aux m t@Tree{branches = [t']} = t { branches = [aux (m-1) t'] }
-        aux m t = t { branches = map (aux n) (branches t) }
+        aux _ t = t { branches = map (aux n) (branches t) }
 
 numTests :: TestResults a -> Int
 numTests (Results Nil) = 0

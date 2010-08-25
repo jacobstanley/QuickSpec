@@ -9,11 +9,11 @@ import Text.Printf
 import System.Random
 import Test.QuickCheck hiding (numTests, Result)
 import Test.QuickCheck.Gen
-import Utils
 import Family
 import UntypedTerm
 import Subst
 
+repeatM :: Monad m => m a -> m [a]
 repeatM = sequence . repeat
 
 data IntTerm where
