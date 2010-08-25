@@ -10,6 +10,7 @@ import Data.List
 import qualified Data.Map as Map
 import Data.Map(Map)
 import CongruenceClosure
+import qualified CongruenceClosure as CC
 import Control.Monad.Writer
 import Control.Exception
 
@@ -56,7 +57,9 @@ laws rs = do
         [ x | Var _ x <- [f] ] ++ concatMap vars as
       namesOf App { fun = f, revArgs = as } = name f:concatMap namesOf as
 
-      eqs = runCC (length names) . execWriterT $ prune cs families namesMap
+      s = initial (length names)
+
+      eqs = evalCC (initial (length names)) . execWriterT $ prune cs families namesMap
 
   forM_ eqs $ \(x, y) -> do
     putStr (show x)
@@ -102,4 +105,3 @@ flattenTerm names t = do
           (Map.findWithDefault (error "flattenTerm: missing name")
                 (name (fun t)) names)
           args'
-

@@ -12,6 +12,7 @@ import Test.QuickCheck.Gen
 import Family
 import UntypedTerm
 import Subst
+import qualified Term as T
 
 repeatM :: Monad m => m a -> m [a]
 repeatM = sequence . repeat
@@ -22,6 +23,16 @@ data IntTerm where
   Negate :: IntTerm -> IntTerm
   Plus, Times :: IntTerm -> IntTerm -> IntTerm
   deriving Eq
+
+data IntSym a where
+  SX, SY, SZ :: WithBound Int (T.Term IntSym a) -> IntSym a
+  SConst :: a -> IntSym a
+  SNegate :: IntSym (Int -> Int)
+  SPlus, STimes :: IntSym (Int -> Int -> Int)
+
+data Type a where
+  Arr :: Type a -> Type b -> Type (a -> b)
+  Int :: Type Int
 
 instance Ord IntTerm where
   compare = comparing term
@@ -63,24 +74,8 @@ instance TermLike IntTerm where
   term (Negate t) = App (ConstS "-") [term t]
   term (Const n) = sym $ ConstS $ show n
 
-{-
-constraints :: IntExpr -> [(Var, WithBound BoolAndInt IntExpr)]
-constraints (Var v x) = [(v, x)]
-constraints (Const _) = []
-constraints (Plus t u) = constraints2 t u
-constraints (Times t u) = constraints2 t u
-constraints (Neg t) = constraints t
-
-constraints2 t u = merge f fst (constraints t) (constraints u)
-  where f (v, x) (_, y) = (v, x `min` y)
-
-instances :: IntExpr -> [IntExpr]
-instances = undefined
--}
-
 main = do
   seed <- newStdGen
-  let f = trees (tests seed) 100
-      rs = f 2
+  let rs = trees (tests seed) 100 2
   printf "w/ depth optimisation: %d terms, %d classes\n" (length (concat (classes rs))) (length (classes rs))
   laws rs
