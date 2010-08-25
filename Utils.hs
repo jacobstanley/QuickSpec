@@ -1,7 +1,7 @@
 module Utils where
 
 import Control.Arrow((&&&))
-import Data.List(groupBy, sortBy)
+import Data.List(groupBy, sortBy, group, sort)
 import Data.Ord(comparing)
 
 partitionBy :: Ord b => (a -> b) -> [a] -> [[a]]
@@ -12,6 +12,9 @@ isSorted xs = and (zipWith (<=) xs (tail xs))
 
 isSortedBy :: Ord b => (a -> b) -> [a] -> Bool
 isSortedBy f xs = isSorted (map f xs)
+
+usort :: Ord a => [a] -> [a]
+usort = map head . group . sort
 
 merge :: Ord b => (a -> a -> a) -> (a -> b) -> [a] -> [a] -> [a]
 merge f c = aux

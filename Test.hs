@@ -1,37 +1,67 @@
-{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleInstances, TypeOperators #-}
+{-# LANGUAGE TypeFamilies, MultiParamTypeClasses, FlexibleInstances, TypeOperators, GADTs #-}
 module Main where
 
 import Data.MemoTrie
 import TestTree
 import Control.Monad
+import Data.Ord
 import Text.Printf
 import System.Random
 import Test.QuickCheck hiding (numTests, Result)
 import Test.QuickCheck.Gen
 import Utils
 import Family
-import Term
+import UntypedTerm
+import Subst
 
 repeatM = sequence . repeat
+
+data IntTerm where
+  X, Y, Z :: WithBound Int IntTerm -> IntTerm
+  Const :: Int -> IntTerm
+  Negate :: IntTerm -> IntTerm
+  Plus, Times :: IntTerm -> IntTerm -> IntTerm
+  deriving Eq
+
+instance Ord IntTerm where
+  compare = comparing term
 
 type Val = (Int, Int, Int)
 
 tests :: StdGen -> [Val]
 tests g = unGen (repeatM arbitrary) g 5
 
-trees :: [Val] -> Int -> Int -> TestResults (Term Val Int)
+type Fun = (->)
+
+trees :: [Val] -> Int -> Int -> TestResults IntTerm
 trees tcs numTests = f
   where f = memo (cutOff numTests . f')
-        base :: Int -> TestTree (Term Val Int)
-        base = memo $ \n -> test tcs $ [ sym "0" $ const 0, sym "1" $ const 1,
-                                         sym "x" (\(_, (x, _, _)) -> x),
-                                         sym "y" (\(_, (_, y, _)) -> y),
-                                         sym "z" (\(_, (_, _, z)) -> z) ]
-        f' :: Int -> TestTree (Term Val Int)
+        base = memo $ \n -> test tcs $ [ Const 0, Const 1 ] ++
+                                       [ x (WithBound n (reps (f n))) | x <- [X, Y, Z] ]
         f' 0 = base 0
-        f' (n+1) = base (n+1) `union` test tcs (liftM3 app3 [sym "+" $ const (+), sym "*" $ const (*)] ts ts ++ map (app (sym "-" $ const negate)) ts)
+        f' (n+1) = base (n+1) `union` test tcs (liftM3 id [Plus, Times] ts ts ++ map Negate ts)
           where ts = reps (f n)
-                app3 f x y = app (app f x) y
+
+instance Eval IntTerm where
+  type TestCase IntTerm = Val
+  type Result IntTerm = Int
+  eval (x,_,_) (X _) = x
+  eval (_,y,_) (Y _) = y
+  eval (_,_,z) (Z _) = z
+  eval v (Plus t u) = eval v t + eval v u
+  eval v (Times t u) = eval v t * eval v u
+  eval v (Negate t) = negate (eval v t)
+  eval _ (Const n) = n
+
+instance TermLike IntTerm where
+  type Bound IntTerm = Int
+  term (X b) = sym $ Var "x" b
+  term (Y b) = sym $ Var "y" b
+  term (Z b) = sym $ Var "z" b
+  term (Plus t u) = App (ConstS "+") [term t, term u]
+  term (Times t u) = App (ConstS "*") [term t, term u]
+  term (Negate t) = App (ConstS "-") [term t]
+  term (Const n) = sym $ ConstS $ show n
 
 {-
 constraints :: IntExpr -> [(Var, WithBound BoolAndInt IntExpr)]
@@ -53,3 +83,4 @@ main = do
   let f = trees (tests seed) 100
       rs = f 2
   printf "w/ depth optimisation: %d terms, %d classes\n" (length (concat (classes rs))) (length (classes rs))
+  laws rs
