@@ -12,10 +12,8 @@ import Test.QuickCheck.Gen
 import Family
 import UntypedTerm
 import Subst
+import Utils
 import qualified Term as T
-
-repeatM :: Monad m => m a -> m [a]
-repeatM = sequence . repeat
 
 data IntTerm where
   X, Y, Z :: WithBound Int IntTerm -> IntTerm

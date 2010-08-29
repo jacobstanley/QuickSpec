@@ -27,6 +27,8 @@ import Control.Exception
 
 type TermFor a = Term (Symbol (WithBound (Bound a) a))
 
+-- To do: GET RID of the Term type entirely. It causes major headaches
+-- when it comes to sorting the equations.
 class Ord (Bound a) => TermLike a where
   type Bound a
   term :: a -> TermFor a
