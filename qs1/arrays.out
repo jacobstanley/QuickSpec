@@ -1,0 +1,29 @@
+zsh -i -c "bench ./Examples arrays"
+== API ==
+-- functions
+new :: Array
+get :: Index -> Array -> Elem
+set :: Index -> Elem -> Array -> Array
+0 :: Elem
+-- variables
+a :: Array
+i, j, k :: Index
+i, j, k :: Int
+x, y, z :: Elem
+== classes ==
+Depth 1: 23 terms, 23 classes, 0 raw equations.
+Depth 2: 71 terms, 65 classes, 6 raw equations.
+Depth 3: 602 terms, 395 classes, 207 raw equations.
+207 raw equations.
+
+Universe has 593 terms.
+== definitions ==
+== equations ==
+1: get i new == 0
+2: set i x (set i y a) == set i x a
+3: set j x (set i x a) == set i x (set j x a)
+4: get i (set i x a) == x
+5: set i (get i a) a == a
+6: get j (set i x new) == get i (set j x new)
+7: i/=j => set j x (set i y a) == set i y (set j x a)
+8: i/=j => get i (set j x a) == get i a

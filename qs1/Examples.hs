@@ -51,16 +51,16 @@ lists = describe "lists" [
  var "ys" list,
  var "zs" list,
  con "++" ((++) :: [Elem] -> [Elem] -> [Elem]),
- con "reverse" (reverse :: [Elem] -> [Elem]),
+-- con "reverse" (reverse :: [Elem] -> [Elem]),
  con "head" (head :: [Elem] -> Elem),
  con "tail" (tail :: [Elem] -> [Elem]),
  con ":" ((:) :: Elem -> [Elem] -> [Elem]),
  con "[]" ([] :: [Elem]),
--- con "sort" (Data.List.sort :: [Elem] -> [Elem]),
+ con "sort" (Data.List.sort :: [Elem] -> [Elem]),
 -- con "mergeL" mergeL,
- con "unit" (\x -> [x] :: [Elem])]
+ con "unit" (\x -> [x] :: [Elem]),
 -- con "insertL" (Data.List.insert :: Int -> [Int] -> [Int]),
--- con "null" (null :: [Int] -> Bool)]
+ con "null" (null :: [Elem] -> Bool)]
   where list :: [Elem]
         list = undefined
 
@@ -151,19 +151,19 @@ npl Nil = 0
 npl (Branch n _ _ _) = n
 
 heaps = describe "heaps" [
- var "h" (Nil :: Heap Int),
- var "h1" (Nil :: Heap Int),
- var "h2" (Nil :: Heap Int),
- con "toList" (\h -> toList h :: [Int]),
- con "fromList" (\xs -> fromList xs :: Heap Int),
- con "isEmpty" (\h -> empty (h :: Heap Int)),
- con "findMin" (\h -> top h :: Int),
- con "insert" (\x h -> insert x h :: Heap Int),
- con "deleteMin" (\h -> delete h :: Heap Int),
- con "merge" (\h1 h2 -> merge h1 h2 :: Heap Int),
- con "empty" (Nil :: Heap Int)
--- con "leftBranch" (leftBranch :: Heap Int -> Heap Int),
--- con "rightBranch" (rightBranch :: Heap Int -> Heap Int)
+ var "h" (Nil :: Heap Elem),
+ var "h1" (Nil :: Heap Elem),
+ var "h2" (Nil :: Heap Elem),
+ con "toList" (\h -> toList h :: [Elem]),
+ con "fromList" (\xs -> fromList xs :: Heap Elem),
+ con "isEmpty" (\h -> empty (h :: Heap Elem)),
+ con "findMin" (\h -> top h :: Elem),
+ con "insert" (\x h -> insert x h :: Heap Elem),
+ con "deleteMin" (\h -> delete h :: Heap Elem),
+ con "merge" (\h1 h2 -> merge h1 h2 :: Heap Elem),
+ con "empty" (Nil :: Heap Elem)
+-- con "leftBranch" (leftBranch :: Heap Elem -> Heap Elem),
+-- con "rightBranch" (rightBranch :: Heap Elem -> Heap Elem)
  ]
 
 nats = describe "nats" [

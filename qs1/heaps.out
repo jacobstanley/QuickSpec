@@ -1,0 +1,67 @@
+zsh -i -c "bench ./Examples heaps"
+== API ==
+-- functions
+true, false :: Bool
+not :: Bool -> Bool
+(&&), (||) :: Bool -> Bool -> Bool
+insert :: Elem -> Heap Elem -> Heap Elem
+unit :: Elem -> [Elem]
+(:) :: Elem -> [Elem] -> [Elem]
+empty :: Heap Elem
+isEmpty :: Heap Elem -> Bool
+findMin :: Heap Elem -> Elem
+deleteMin :: Heap Elem -> Heap Elem
+merge :: Heap Elem -> Heap Elem -> Heap Elem
+toList :: Heap Elem -> [Elem]
+[] :: [Elem]
+null :: [Elem] -> Bool
+head :: [Elem] -> Elem
+fromList :: [Elem] -> Heap Elem
+tail, sort :: [Elem] -> [Elem]
+(++) :: [Elem] -> [Elem] -> [Elem]
+-- variables
+x, y, z :: Bool
+i, j, k :: Int
+x, y, z :: Elem
+h, h1, h2 :: Heap Elem
+xs, ys, zs :: [Elem]
+== classes ==
+Depth 1: 56 terms, 56 classes, 0 raw equations.
+Depth 2: 230 terms, 154 classes, 76 raw equations.
+Depth 3: 3785 terms, 2233 classes, 1552 raw equations.
+1545 raw equations.
+
+Universe has 3765 terms.
+== definitions ==
+1: unit x := x:[]
+2: x:xs := unit x++xs
+3: findMin h := head (toList h)
+4: isEmpty h := null (toList h)
+5: sort xs := toList (fromList xs)
+6: null xs := isEmpty (fromList xs)
+7: insert x h := merge h (insert x empty)
+== equations ==
+1: merge h1 h == merge h h1
+2: merge h empty == h
+3: toList empty == []
+4: fromList [] == empty
+5: isEmpty empty == true
+6: findMin empty == undefined
+7: deleteMin empty == undefined
+8: insert y (insert x h) == insert x (insert y h)
+9: merge h (insert x h1) == insert x (merge h h1)
+10: merge h1 (merge h h2) == merge h (merge h1 h2)
+11: fromList (ys++xs) == fromList (xs++ys)
+12: isEmpty (insert x h) == false
+13: insert x (fromList xs) == fromList (x:xs)
+14: head (toList h) == findMin h
+15: sort (toList h) == toList h
+16: null (toList h) == isEmpty h
+17: toList (fromList xs) == sort xs
+18: toList (deleteMin h) == tail (toList h)
+19: fromList (sort xs) == fromList xs
+20: fromList (toList h) == h
+21: merge h (deleteMin h) == deleteMin (merge h h)
+22: isEmpty h&&isEmpty h1 == isEmpty (merge h h1)
+23: merge (fromList xs) (fromList ys) == fromList (xs++ys)
+24: findMin (merge h h) == findMin h
