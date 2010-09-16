@@ -175,7 +175,7 @@ nats = describe "nats" [
 
 type StackSet = T.StackSet Elem
 
-newtype Elem = Elem Int deriving (Arbitrary, Eq, Ord, Typeable, Show)
+newtype Elem = Elem Int deriving (Arbitrary, CoArbitrary, Eq, Ord, Typeable, Show)
 instance Classify Elem where
   type Value Elem = Elem
   evaluate = return
@@ -206,44 +206,53 @@ tinywm = describe "tinywm" [
  var "o'" (undefined :: Ordering)]
 
 examples = [
- ("nats", (base ++ nats, const True, allOfThem)),
- ("bools", (base ++ bools, const True, allOfThem)),
- ("lists", (base ++ bools ++ lists, const True, about ["lists"])),
- ("heaps", (base ++ bools ++ lists ++ heaps, const True, about ["heaps"])),
- ("arrays", (base ++ arrays, const True, allOfThem)),
- ("comp", (base ++ comp, const True, allOfThem)),
- ("queues", (base ++ bools ++ queues, const True, about ["queues"])),
- ("queuesM", (queuesM, noRebinding, about ["queuesM"])),
- ("arraysM", (arraysM, noRebinding, about ["arraysM"])),
- ("pretty", (base ++ nats ++ pretty, const True, about ["pretty"])),
- ("regex", (regex, const True, allOfThem)),
- ("tinywm", (base ++ lists ++ tinywm, const True, about ["tinywm"]))
+ ("nats", (base ++ nats, True, const True, allOfThem)),
+ ("bools", (base ++ bools, True, const True, allOfThem)),
+ ("lists", (base ++ bools ++ lists, True, const True, about ["lists"])),
+ ("heaps", (base ++ bools ++ lists ++ heaps, False, const True, about ["heaps"])),
+ ("arrays", (base ++ arrays, True, const True, allOfThem)),
+ ("comp", (base ++ comp, False, const True, allOfThem)),
+ ("queues", (base ++ bools ++ queues, True, const True, about ["queues"])),
+ ("queuesM", (queuesM, False, noRebinding, about ["queuesM"])),
+ ("arraysM", (arraysM, False, noRebinding, about ["arraysM"])),
+ ("pretty", (base ++ nats ++ pretty, False, const True, about ["pretty"])),
+ ("regex", (regex, False, const True, allOfThem)),
+ ("tinywm", (base ++ lists ++ tinywm, True, const True, about ["tinywm"]))
  ]
 
-regex = [
- var "x" True,
- var "y" True,
- var "z" True,
- var "r" (Char True),
- var "s" (Char True),
- var "t" (Char True),
- con "char" (Char :: Bool -> Regex Bool),
- con "any" (AnyChar :: Regex Bool),
- con "empty" (Epsilon :: Regex Bool),
- con "zero" (Zero :: Regex Bool),
- con "concat" (Concat :: Regex Bool -> Regex Bool -> Regex Bool),
- con "choice" (Choice :: Regex Bool -> Regex Bool -> Regex Bool),
- con "star" (star :: Regex Bool -> Regex Bool) ]
+data Sym = A | B deriving (Eq, Ord, Typeable)
 
-instance Arbitrary (Regex Bool) where
+instance Arbitrary Sym where
+  arbitrary = elements [A, B]
+
+instance Classify Sym where
+  type Value Sym = Sym
+  evaluate = return
+
+regex = [
+ var "x" A,
+ var "y" A,
+ var "z" A,
+ var "r" (Char A),
+ var "s" (Char A),
+ var "t" (Char A),
+ con "char" (Char :: Sym -> Regex Sym),
+ con "any" (AnyChar :: Regex Sym),
+ con "ε" (Epsilon :: Regex Sym),
+ con "0" (Zero :: Regex Sym),
+ con ";" (Concat :: Regex Sym -> Regex Sym -> Regex Sym),
+ con "|" (Choice :: Regex Sym -> Regex Sym -> Regex Sym),
+ con "*" (star :: Regex Sym -> Regex Sym) ]
+
+instance Arbitrary (Regex Sym) where
   arbitrary = sized arb
     where arb 0 = oneof [fmap Char arbitrary, return AnyChar, return Epsilon, return Zero]
           arb n = oneof [fmap Char arbitrary, return AnyChar, return Epsilon, return Zero,
                          liftM2 Concat arb' arb', liftM2 Choice arb' arb', fmap Plus (arb (n-1))]
             where arb' = arb (n `div` 2)
 
-instance Classify (Regex Bool) where
-  type Value (Regex Bool) = Bool
+instance Classify (Regex Sym) where
+  type Value (Regex Sym) = Bool
   evaluate r = do
     s <- arbitrary
     return (Regex.run (compile r) s)
@@ -253,13 +262,13 @@ main = do
   let test = case args of
                [] -> "bools"
                [x] -> x
-      Just (cons, p, p') = lookup test examples
-  laws 3 cons p p'
+      Just (cons, cond, p, p') = lookup test examples
+  laws 3 cons cond p p'
   --congruenceCheck 3 cons p
 
 newtype Index = Index Int deriving (Eq, Ord, CoArbitrary, Random, Num, Show, Typeable)
 instance Arbitrary Index where arbitrary = choose (0, 15)
-newtype Array = Array [Int] deriving (Eq, Ord, CoArbitrary, Typeable)
+newtype Array = Array [Elem] deriving (Eq, Ord, CoArbitrary, Typeable)
 instance Arbitrary Array where arbitrary = fmap Array (replicateM 16 arbitrary)
 
 instance Classify Array where
@@ -281,12 +290,12 @@ instance Classify a => Classify (ArrayM a) where
     return (r', a')
 
 newA :: ArrayM ()
-newA = put (Array (replicate 16 0))
+newA = put (Array (replicate 16 (Elem 0)))
 
-getA :: Index -> ArrayM Int
+getA :: Index -> ArrayM Elem
 getA (Index ix) = gets (\(Array a) -> a !! ix)
 
-setA :: Index -> Int -> ArrayM ()
+setA :: Index -> Elem -> ArrayM ()
 setA (Index ix) v = modify (\(Array a) -> Array [ if i == ix then v else a !! i | i <- [0..15] ])
 
 arrays = [
@@ -294,28 +303,29 @@ arrays = [
  var "i" (Index undefined),
  var "j" (Index undefined),
  var "k" (Index undefined),
- con "new" (Array (replicate 16 0)),
+ con "new" (Array (replicate 16 (Elem 0))),
  con "get" (\(Index ix) (Array a) -> a !! ix),
  con "set" (\(Index ix) v (Array a) -> Array [ if i == ix then v else a !! i | i <- [0..15] ]),
- con "0" (0 :: Int)
+ con "0" (Elem 0)
  ]
 
 arraysM = describe "arraysM" [
  (con "X" X) { typ = TVar },
  (con "Y" Y) { typ = TVar },
  (con "Z" Z) { typ = TVar },
- var "x" (undefined :: Symbolic Int),
- var "y" (undefined :: Symbolic Int),
- var "z" (undefined :: Symbolic Int),
- var "i" (undefined :: Symbolic Index),
- var "j" (undefined :: Symbolic Index),
- var "k" (undefined :: Symbolic Index),
- con "read" (read :: Var -> Symbolic Int),
- con "read" (read :: Var -> Symbolic Index),
- con "return" (\x v -> symbolic (x :: Symbolic Int) >>= write v :: Prog ArrayM ()),
+ var "x" (undefined :: Symbolic Elem),
+ var "y" (undefined :: Symbolic Elem),
+ var "z" (undefined :: Symbolic Elem),
+-- var "i" (undefined :: Symbolic Index),
+-- var "j" (undefined :: Symbolic Index),
+-- var "k" (undefined :: Symbolic Index),
+ con "0" (Symbolic (const (Index 0)) :: Symbolic Index),
+ con "read" (read :: Var -> Symbolic Elem),
+-- con "read" (read :: Var -> Symbolic Index),
+ con "return" (\x v -> symbolic (x :: Symbolic Elem) >>= write v :: Prog ArrayM ()),
  con "return" (\x v -> symbolic (x :: Symbolic Index) >>= write v :: Prog ArrayM ()),
  var "k" (undefined :: Prog ArrayM ()),
- con "new" ((cps $ run newA)),
+-- con "new" ((cps $ run newA)),
  con "get" (\ix v -> cps $ symbolic ix >>= run . getA >>= write v),
  con "set" (\ix x -> cps $ symbolic ix >>= \ix' -> symbolic x >>= run . setA ix')]
 
@@ -326,7 +336,7 @@ comp = [
  con "." (\f g x -> f (g (x :: Int) :: Int) :: Int),
  con "id" (id :: Int -> Int)]
 
-data Queue = Queue [Int] [Int] deriving (Typeable, Show)
+data Queue = Queue [Elem] [Elem] deriving (Typeable, Show)
 
 instance Eq Queue where
   q1 == q2 = q1 `compare` q2 == EQ
@@ -338,7 +348,7 @@ instance Arbitrary Queue where
   arbitrary = liftM2 Queue arbitrary arbitrary
 
 instance Classify Queue where
-  type Value Queue = [Int]
+  type Value Queue = [Elem]
   evaluate = return . listQ
 
 deriving instance Typeable2 State
@@ -386,7 +396,7 @@ newM = put new
 nullM :: QueueM Bool
 nullM = gets nullQ
 
-inlM, inrM :: Int -> QueueM ()
+inlM, inrM :: Elem -> QueueM ()
 inlM x = modify (inl x)
 inrM x = modify (inr x)
 
@@ -394,7 +404,7 @@ outlM, outrM :: QueueM ()
 outlM = modify outl
 outrM = modify outr
 
-peeklM, peekrM :: QueueM Int
+peeklM, peekrM :: QueueM Elem
 peeklM = gets peekl
 peekrM = gets peekr
 
@@ -430,7 +440,7 @@ instance (Typeable1 m, Typeable a, Classify (m (a, Env))) => Classify (Prog m a)
 instance Monad m => Arbitrary (Prog m ()) where
   arbitrary = return (return ())
 
-type Env = (Vars Int, Vars Index)
+type Env = (Vars Elem, Vars Index)
 
 values :: Typeable a => Env -> [a]
 values (xs1, xs2) = catMaybes (map3 cast xs1 ++ map3 cast xs2)
@@ -440,7 +450,7 @@ class InEnv a where
   getEnv :: Env -> Vars a
   putEnv :: Vars a -> Env -> Env
 
-instance InEnv Int where
+instance InEnv Elem where
   getEnv = fst
   putEnv vs' (_, vs) = (vs', vs)
 
@@ -496,16 +506,16 @@ queuesM = describe "queuesM" [
  (con "X" X) { typ = TVar },
  (con "Y" Y) { typ = TVar },
  (con "Z" Z) { typ = TVar },
- var "x" (undefined :: Symbolic Int),
- var "y" (undefined :: Symbolic Int),
- var "z" (undefined :: Symbolic Int),
+ var "x" (undefined :: Symbolic Elem),
+ var "y" (undefined :: Symbolic Elem),
+ var "z" (undefined :: Symbolic Elem),
  -- var "x" (undefined :: Symbolic Bool),
  -- var "y" (undefined :: Symbolic Bool),
  -- var "z" (undefined :: Symbolic Bool),
  -- con "read" readB,
- con "read" (read :: Var -> Symbolic Int),
+ con "read" (read :: Var -> Symbolic Elem),
  -- con "return" (return :: Bool -> QueueProg Bool),
- con "return" (\x v -> symbolic (x :: Symbolic Int) >>= write v :: Prog QueueM ()),
+ con "return" (\x v -> symbolic (x :: Symbolic Elem) >>= write v :: Prog QueueM ()),
  var "k" (undefined :: Prog QueueM ()),
  con "empty" ((cps $ run newM)),
  con "isnotempty" (cps $ run (do Queue xs ys <- get; (_:_) <- return (xs++ys); return () :: QueueM ())),

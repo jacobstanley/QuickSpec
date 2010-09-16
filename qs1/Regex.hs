@@ -58,13 +58,13 @@ compile1 (Plus r) start end = do
   epsilon end' start'
   compile1 r start' end'
 
-compile :: (Show a, Ord a) => Regex a -> NFA a
+compile :: Ord a => Regex a -> NFA a
 compile r = NFA (close (foldr enter M.empty epsilons)) (foldr flatten M.empty edges) (State 0) (State 1)
   where (edges, epsilons, _) = execState (compile1 r (State 0) (State 1)) ([], [], State 2)
         flatten (start, edge, to) edges = M.insertWith (++) (start, edge) [to] edges
         enter (from, to) epsilons = M.insertWith (++) from [to] epsilons
 
-close :: (Show a, Ord a) => Map a [a] -> Map a [a]
+close :: Ord a => Map a [a] -> Map a [a]
 close m | xs == [] = m
         | otherwise = close (foldr enter m xs)
         where enter (from, to) epsilons = M.insertWith (++) from [to] epsilons

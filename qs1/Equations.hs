@@ -241,7 +241,7 @@ definitions es = nubBy (\(_, t) (_, t') -> fun t == fun t') (filter isDefinition
 allOfThem = const True
 about xs = any (\s -> description s `elem` map Just xs) . symbols
 
-laws depth ctx0 p p' = do
+laws depth ctx0 cond p p' = do
   hSetBuffering stdout NoBuffering
   let ctx = zipWith relabel [0..] (ctx0 ++ undefinedSyms ctx0)
   putStrLn "== API =="
@@ -268,7 +268,7 @@ laws depth ctx0 p p' = do
        ]
   putStrLn "== equations =="
   let interesting (_, x, y) = p' x || p' y
-      conds = [ i :/= j | (i:j:_) <- partitionBy (show . symbolType) (filter (\s -> typ s == TVar) ctx) ]
+      conds = [ i :/= j | cond, (i:j:_) <- partitionBy (show . symbolType) (filter (\s -> typ s == TVar) ctx) ]
       pruned = filter interesting (prune p ctx depth univ (eqs Always) [ (cond, eqs cond) | cond <- conds ])
   sequence_
        [ putStrLn (show i ++ ": " ++ concat [ show x ++ "/=" ++ show y ++ " => " | x :/= y <- [cond] ] ++ show y ++ " == " ++ show x)
@@ -289,7 +289,7 @@ test p depth ctx seeds base = do
   printf "%d terms, " (length (concat cs0))
   let evals = [ toValue . eval (memoSym ctx ctxFun) | (ctxFun, toValue) <- map useSeed seeds ]
       conds = map (\f -> satisfied (f . Const)) evals
-      cs1 = evaluate (take 200 (zip evals conds)) (pack cs0)
+      cs1 = evaluate (take 500 (zip evals conds)) (pack cs0)
   printf "%d classes, %d raw equations.\n"
          (length (unpack cs1))
          (sum (map (subtract 1 . length) (unpack cs1)))
