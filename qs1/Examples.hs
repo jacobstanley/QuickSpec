@@ -22,6 +22,7 @@ import qualified TinyWM as T
 import qualified TinyWMProperties as TP
 import qualified Data.Map as M
 import qualified Regex
+import qualified Arrays
 
 bools = describe "bools" [
  var "x" False,
@@ -214,7 +215,7 @@ examples = [
  ("comp", (base ++ comp, False, const True, allOfThem)),
  ("queues", (base ++ bools ++ queues, True, const True, about ["queues"])),
  ("queuesM", (queuesM, False, noRebinding, about ["queuesM"])),
- ("arraysM", (arraysM, False, noRebinding, about ["arraysM"])),
+-- ("arraysM", (arraysM, False, noRebinding, about ["arraysM"])),
  ("pretty", (base ++ nats ++ pretty, False, const True, about ["pretty"])),
  ("regex", (regex, False, const True, allOfThem)),
  ("tinywm", (base ++ lists ++ tinywm, True, const True, about ["tinywm"]))
@@ -266,23 +267,10 @@ main = do
   laws 3 cons cond p p'
   --congruenceCheck 3 cons p
 
-newtype Index = Index Int deriving (Eq, Ord, CoArbitrary, Random, Num, Show, Typeable)
-instance Arbitrary Index where arbitrary = choose (0, 15)
-newtype Array = Array [Elem] deriving (Eq, Ord, CoArbitrary, Typeable)
-instance Arbitrary Array where arbitrary = fmap Array (replicateM 16 arbitrary)
-
-instance Classify Array where
-  type Value Array = Array
-  evaluate = return
-
-instance Classify Index where
-  type Value Index = Index
-  evaluate = return
-
-type ArrayM = State Array
+type ArrayM = State Arrays.Array
 
 instance Classify a => Classify (ArrayM a) where
-  type Value (ArrayM a) = (Value a, Array)
+  type Value (ArrayM a) = (Value a, Arrays.Array)
   evaluate x = do
     a <- arbitrary
     let (r, a') = runState x a
@@ -290,44 +278,44 @@ instance Classify a => Classify (ArrayM a) where
     return (r', a')
 
 newA :: ArrayM ()
-newA = put (Array (replicate 16 (Elem 0)))
+newA = put Arrays.new
 
-getA :: Index -> ArrayM Elem
-getA (Index ix) = gets (\(Array a) -> a !! ix)
+getA :: Arrays.Index -> ArrayM Elem
+getA = fmap Elem . gets . Arrays.get
 
-setA :: Index -> Elem -> ArrayM ()
-setA (Index ix) v = modify (\(Array a) -> Array [ if i == ix then v else a !! i | i <- [0..15] ])
+setA :: Arrays.Index -> Elem -> ArrayM ()
+setA ix (Elem v) = modify (Arrays.set ix v)
 
 arrays = [
- var "a" (Array undefined),
- var "i" (Index undefined),
- var "j" (Index undefined),
- var "k" (Index undefined),
- con "new" (Array (replicate 16 (Elem 0))),
- con "get" (\(Index ix) (Array a) -> a !! ix),
- con "set" (\(Index ix) v (Array a) -> Array [ if i == ix then v else a !! i | i <- [0..15] ]),
+ var "a" (undefined :: Arrays.Array),
+ var "i" (Arrays.Index undefined),
+ var "j" (Arrays.Index undefined),
+ var "k" (Arrays.Index undefined),
+ con "new" Arrays.new,
+ con "get" (\ix v -> Elem (Arrays.get ix v)),
+ con "set" (\ix (Elem v) -> Arrays.set ix v),
  con "0" (Elem 0)
  ]
 
-arraysM = describe "arraysM" [
- (con "X" X) { typ = TVar },
- (con "Y" Y) { typ = TVar },
- (con "Z" Z) { typ = TVar },
- var "x" (undefined :: Symbolic Elem),
- var "y" (undefined :: Symbolic Elem),
- var "z" (undefined :: Symbolic Elem),
--- var "i" (undefined :: Symbolic Index),
--- var "j" (undefined :: Symbolic Index),
--- var "k" (undefined :: Symbolic Index),
- con "0" (Symbolic (const (Index 0)) :: Symbolic Index),
- con "read" (read :: Var -> Symbolic Elem),
--- con "read" (read :: Var -> Symbolic Index),
- con "return" (\x v -> symbolic (x :: Symbolic Elem) >>= write v :: Prog ArrayM ()),
- con "return" (\x v -> symbolic (x :: Symbolic Index) >>= write v :: Prog ArrayM ()),
- var "k" (undefined :: Prog ArrayM ()),
--- con "new" ((cps $ run newA)),
- con "get" (\ix v -> cps $ symbolic ix >>= run . getA >>= write v),
- con "set" (\ix x -> cps $ symbolic ix >>= \ix' -> symbolic x >>= run . setA ix')]
+-- arraysM = describe "arraysM" [
+--  (con "X" X) { typ = TVar },
+--  (con "Y" Y) { typ = TVar },
+--  (con "Z" Z) { typ = TVar },
+--  var "x" (undefined :: Symbolic Elem),
+--  var "y" (undefined :: Symbolic Elem),
+--  var "z" (undefined :: Symbolic Elem),
+-- -- var "i" (undefined :: Symbolic Index),
+-- -- var "j" (undefined :: Symbolic Index),
+-- -- var "k" (undefined :: Symbolic Index),
+--  con "0" (Symbolic (const (Index 0)) :: Symbolic Index),
+--  con "read" (read :: Var -> Symbolic Elem),
+-- -- con "read" (read :: Var -> Symbolic Index),
+--  con "return" (\x v -> symbolic (x :: Symbolic Elem) >>= write v :: Prog ArrayM ()),
+--  con "return" (\x v -> symbolic (x :: Symbolic Index) >>= write v :: Prog ArrayM ()),
+--  var "k" (undefined :: Prog ArrayM ()),
+-- -- con "new" ((cps $ run newA)),
+--  con "get" (\ix v -> cps $ symbolic ix >>= run . getA >>= write v),
+--  con "set" (\ix x -> cps $ symbolic ix >>= \ix' -> symbolic x >>= run . setA ix')]
 
 comp = [
  var "f" (undefined :: (Int -> Int)),
@@ -440,7 +428,7 @@ instance (Typeable1 m, Typeable a, Classify (m (a, Env))) => Classify (Prog m a)
 instance Monad m => Arbitrary (Prog m ()) where
   arbitrary = return (return ())
 
-type Env = (Vars Elem, Vars Index)
+type Env = (Vars Elem, Vars Arrays.Index)
 
 values :: Typeable a => Env -> [a]
 values (xs1, xs2) = catMaybes (map3 cast xs1 ++ map3 cast xs2)
@@ -454,7 +442,7 @@ instance InEnv Elem where
   getEnv = fst
   putEnv vs' (_, vs) = (vs', vs)
 
-instance InEnv Index where
+instance InEnv Arrays.Index where
   getEnv = snd
   putEnv vs' (vs, _) = (vs, vs')
 

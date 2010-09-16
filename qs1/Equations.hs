@@ -241,13 +241,21 @@ definitions es = nubBy (\(_, t) (_, t') -> fun t == fun t') (filter isDefinition
 allOfThem = const True
 about xs = any (\s -> description s `elem` map Just xs) . symbols
 
+showType :: TypeRep -> String
+showType = show . mapTyCon unqualify
+  where unqualify = reverse . takeWhile (/= '.') . reverse
+
+mapTyCon :: (String -> String) -> TypeRep -> TypeRep
+mapTyCon f t = mkTyConApp (mkTyCon (f (tyConString tc))) (map (mapTyCon f) ts)
+  where (tc, ts) = splitTyConApp t
+
 laws depth ctx0 cond p p' = do
   hSetBuffering stdout NoBuffering
   let ctx = zipWith relabel [0..] (ctx0 ++ undefinedSyms ctx0)
   putStrLn "== API =="
   let putSignature ts = mapM_ putTerms (partitionBy (show . termType) ts)
        where putTerms ts@(t:_) =
-               putStrLn (intercalate ", " (map show ts) ++ " :: " ++ show (termType t))
+               putStrLn (intercalate ", " (map show ts) ++ " :: " ++ showType (termType t))
   putStrLn "-- functions"
   putSignature [ Const elt | elt <- ctx, typ elt == TConst && not (isUndefined elt) ]
   putStrLn "-- variables"
