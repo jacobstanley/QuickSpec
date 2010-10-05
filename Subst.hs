@@ -13,6 +13,7 @@ import CongruenceClosure
 import qualified CongruenceClosure as CC
 import Control.Monad.Writer
 import Control.Exception
+import Data.Ord
 
 -- Perhaps we don't need the Term stuff explicitly at all---rather,
 -- have a typeclass with all the CC operations:
@@ -73,7 +74,12 @@ prune cs families names = do
   cs' <- fmap (zipWith zip cs) $ mapM (mapM (lift . flattenTerm names)) cs
   let flattenFamily names (k, v) = fmap (k,) (mapM (flattenTerm names) v)
   families' <- fmap Map.fromList (mapM (lift . flattenFamily names) (Map.toList families))
-  let eqs0 = sort [ (u, t) | (t:ts) <- cs', u <- ts ]
+  let eqs0 = sortBy (comparing stuff) [ (u, t) | (t:ts) <- cs', u <- ts ]
+      stuff ((u,_), (t,_)) = (containsP u || containsP t, size t `max` size u, -length (nub (freeVars u ++ freeVars t)), u, t)
+      containsP App { fun = f, revArgs = as } = take 1 (name f) == "p" || any containsP as
+      size App { revArgs = as } = 1 + sum (map size as)
+      freeVars App { fun = f@(Var _ _), revArgs = as } = name f:concatMap freeVars as
+      freeVars App { revArgs = as } = concatMap freeVars as
   pruneLoop families' names eqs0
 
 pruneLoop :: TermLike a => Map (Bound a) [Int] ->

@@ -18,8 +18,10 @@ instance Classify Index where
   type Value Index = Index
   evaluate = return
 
-newtype Array = Array [Int] deriving (Eq, Ord, CoArbitrary, Typeable)
-newtype Index = Index Int deriving (Eq, Ord, Random, CoArbitrary, Num, Show, Typeable)
+newtype Array = Array [Int]
+  deriving (Eq, Ord, CoArbitrary, Typeable)
+newtype Index = Index Int
+  deriving (Eq, Ord, Random, CoArbitrary, Num, Show, Typeable)
 
 new :: Array
 new = Array (replicate 16 0)

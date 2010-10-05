@@ -432,7 +432,8 @@ type Env = (Vars Elem, Vars Arrays.Index)
 
 values :: Typeable a => Env -> [a]
 values (xs1, xs2) = catMaybes (map3 cast xs1 ++ map3 cast xs2)
-  where map3 f (x, y, z) = [f x, f y, f z]
+  where map3 :: (a -> b) -> (a, a, a) -> [b]
+        map3 f (x, y, z) = [f x, f y, f z]
 
 class InEnv a where
   getEnv :: Env -> Vars a
