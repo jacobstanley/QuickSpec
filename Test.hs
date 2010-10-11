@@ -27,7 +27,7 @@ data IntTerm where
 instance Ord IntTerm where
   compare = comparing term
 
-type Val = Int -> Int
+type Val = [Int]
 
 trees :: [Val] -> Int -> Int -> TestResults IntTerm
 trees tcs numTests = f
@@ -41,7 +41,7 @@ trees tcs numTests = f
 instance Eval IntTerm where
   type TestCase IntTerm = Val
   type Result IntTerm = Int
-  eval val (Var n _) = val n
+  eval val (Var n _) = val !! n
   eval v (Plus t u) = eval v t + eval v u
   eval v (Times t u) = eval v t * eval v u
   eval v (Negate t) = negate (eval v t)
@@ -57,6 +57,6 @@ instance TermLike IntTerm where
 
 main = do
   seed <- newStdGen
-  let rs = trees (unGen testCases seed undefined) 100 2
+  let rs = trees (unGen (testCases (repeatM arbitrary)) seed undefined) 100 2
   printf "w/ depth optimisation: %d terms, %d classes\n" (length (concat (classes rs))) (length (classes rs))
   laws rs

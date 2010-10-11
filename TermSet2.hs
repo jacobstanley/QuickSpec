@@ -31,8 +31,8 @@ data UntypedTestResults = forall a. Typeable a => UntypedTestResults (TestResult
 newtype Univ a = Univ { unUniv :: Int -> Gen (Assoc UntypedTestResults a) }
 newtype Label a = Label Int
 
-testCases :: Arbitrary a => Gen [a]
-testCases = forM (cycle [1..50]) $ \n -> resize n arbitrary
+testCases :: Gen a -> Gen [a]
+testCases g = forM (cycle [1..50]) $ \n -> resize n g
 
 generate :: Typeable a => TestTree a -> Univ (Label a)
 generate t = Univ $ \n -> return (fmap Label (assoc (UntypedTestResults (cutOff n t))))
