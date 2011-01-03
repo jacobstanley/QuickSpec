@@ -38,6 +38,23 @@ trees tcs numTests = f
         f' (n+1) = base (n+1) `union` test tcs (liftM3 id [Plus, Times] ts ts ++ map Negate ts)
           where ts = reps (f n)
 
+base0 = set 0 {- family -} [Const 0, Const 1] -- something like Set Int IntTerm
+base1 = set 0 [Negate] -- Set Int (IntTerm -> IntTerm)
+base2 = set 0 [Plus, Times] -- Set Int (IntTerm -> IntTerm IntTerm)
+terms 0 = base0
+terms (n+1) = base0 `union` base1 <*> terms n `union` base2 <*> terms n <*> terms n
+-- instance Family f => Applicative (Set f) where ...
+-- pure produces something of depth 0
+-- <*> uses family apply?? does this respect the arrow rules?
+-- pure f <*> x = fmap f x
+-- in particular, pure id <*> x = x which is not really respected when family is depth
+-- (maybe we don't even want it to be a Functor...)
+
+-- maybe we can also specify a "variable mapping" depth -> [Var] so that a variable can represent several depths, rather than generating WithBound nonsense as we go.
+-- Our term-generation data structure will be a map family -> TestTree blahblah.
+-- So then we aggressively split up our termsets by family?
+-- We also need some stuff so that a family can include smaller families---implementation: memoise a function [Family]->TestTree. Alternatively---when we see a variable in a term, we remember which other terms we could have generated there. What we're proposing now is to reconstruct the variable's family later instead, which is maybe not as nice... because, what we have is the depth of the term as a whole and not the depth of the "hole" that the variable fills.
+
 instance Eval IntTerm where
   type TestCase IntTerm = Val
   type Result IntTerm = Int

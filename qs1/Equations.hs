@@ -66,36 +66,35 @@ undefinedSyms = typeNub . concatMap (makeUndefined . symbolClass) . typeNub
 -- Equivalence class refinement.
 
 data Condition = Always | Symbol :/= Symbol deriving (Eq, Ord, Show)
-satisfied :: Ord a => (Symbol -> a) -> Condition -> Bool
-satisfied value (a :/= b) = value a /= value b
-satisfied value Always = True
+-- satisfied :: Ord a => (Symbol -> a) -> Condition -> Bool
+-- satisfied value (a :/= b) = value a /= value b
+-- satisfied value Always = True
 
-data Classes a = Classes [Condition -> Bool] [TestResults a]
+data Classes a = Classes [TestResults a]
 data TestResults a = TestResults [a] [[Int]]
 
 pack :: [[a]] -> Classes a
-pack xss = Classes [] [ TestResults xs [] | xs <- xss ]
+pack xss = Classes [ TestResults xs [] | xs <- xss ]
 
-evaluate :: Ord b => [(a -> b, Condition -> Bool)] -> Classes a -> Classes a
-evaluate ss (Classes cs rss) = Classes (cs ++ map snd ss)
-                                       [ TestResults xs (vss ++ map (evaluate1 xs) ss)
-                                       | TestResults xs vss <- rss ]
-  where evaluate1 xs (eval, _) = collate (map eval xs)
-        collate vs = [ Map.findWithDefault undefined v m | v <- vs ] `using` seqList rwhnf
+evaluate :: Ord b => (() -> [(a -> b)]) -> Classes a -> Classes a
+evaluate ss (Classes rss) = Classes [ TestResults xs (vss ++ map (evaluate1 xs) (ss ()))
+                                    | TestResults xs vss <- rss ]
+  where evaluate1 xs eval = collate (map eval xs)
+        collate vs = [ Map.findWithDefault undefined v m | v <- vs ]-- `using` seqList rwhnf
           where m = Map.fromList (zip (nubSort vs) [0..])
 
-restrict :: Condition -> Classes a -> Classes a
-restrict c (Classes ps rss) = Classes (filter keep ps) (map restrict1 rss)
-  where keep p = p c
-        restrict1 (TestResults xs vss) =
-          TestResults xs [ vs | (p, vs) <- zip ps vss, p c ]
+-- restrict :: Condition -> Classes a -> Classes a
+-- restrict c (Classes ps rss) = Classes (filter keep ps) (map restrict1 rss)
+--   where keep p = p c
+--         restrict1 (TestResults xs vss) =
+--           TestResults xs [ vs | (p, vs) <- zip ps vss, p c ]
 
 limit :: Int -> Classes a -> Classes a
-limit n (Classes ps rss) = Classes (take n ps) (map limit1 rss)
+limit n (Classes rss) = Classes (map limit1 rss)
   where limit1 (TestResults xs rss) = TestResults xs (take n rss)
 
 unpack :: Classes a -> [[a]]
-unpack (Classes _ rss) = concatMap unpack1 rss
+unpack (Classes rss) = concatMap unpack1 rss
   where unpack1 (TestResults xs vss) = map (map fst) (partitionBy snd (zip xs (transpose vss)))
 
 parRefine :: ([a] -> [[a]]) -> ([[a]] -> [[a]])
@@ -265,7 +264,7 @@ laws depth ctx0 cond p p' = do
   cs <- tests p (take 1) depth ctx seeds
   let eqs cond = map head
                $ partitionBy equationOrder
-               $ [ (y,x) | x:xs <- map sort (unpack (restrict cond cs)), funTypes [termType x] == [], y <- xs ]
+               $ [ (y,x) | x:xs <- map sort (unpack cs), funTypes [termType x] == [], y <- xs ]
   printf "%d raw equations.\n\n" (length (eqs Always))
   let univ = filter (not . termIsUndefined) (concat (unpack cs))
   printf "Universe has %d terms.\n" (length univ)
@@ -276,7 +275,8 @@ laws depth ctx0 cond p p' = do
        ]
   putStrLn "== equations =="
   let interesting (_, x, y) = p' x || p' y
-      conds = [ i :/= j | cond, (i:j:_) <- partitionBy (show . symbolType) (filter (\s -> typ s == TVar) ctx) ]
+      conds = []
+      -- conds = [ i :/= j | cond, (i:j:_) <- partitionBy (show . symbolType) (filter (\s -> typ s == TVar) ctx) ]
       pruned = filter interesting (prune p ctx depth univ (eqs Always) [ (cond, eqs cond) | cond <- conds ])
   sequence_
        [ putStrLn (show i ++ ": " ++ concat [ show x ++ "/=" ++ show y ++ " => " | x :/= y <- [cond] ] ++ show y ++ " == " ++ show x)
@@ -295,12 +295,10 @@ test p depth ctx seeds base = do
   printf "Depth %d: " depth
   let cs0 = filter (not . null) [ filter p (terms ctx base ty) | ty <- allTypes ctx ]
   printf "%d terms, " (length (concat cs0))
-  let evals = [ toValue . eval (memoSym ctx ctxFun) | (ctxFun, toValue) <- map useSeed seeds ]
-      conds = map (\f -> satisfied (f . Const)) evals
-      cs1 = evaluate (take 500 (zip evals conds)) (pack cs0)
-  printf "%d classes, %d raw equations.\n"
+  let evals = {-# SCC "evals" #-} \() -> [ toValue . eval (memoSym ctx ctxFun) | (ctxFun, toValue) <- map useSeed seeds ]
+      cs1 = {-# SCC "cs1" #-} evaluate (take 300 . evals) (pack cs0)
+  printf "%d classes.\n"
          (length (unpack cs1))
-         (sum (map (subtract 1 . length) (unpack cs1)))
   return cs1
 
 memoSym :: Context -> (Symbol -> a) -> (Symbol -> a)
