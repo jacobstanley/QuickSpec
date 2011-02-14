@@ -51,16 +51,24 @@ lists = describe "lists" [
  var "ys" list,
  var "zs" list,
  con "++" ((++) :: [Elem] -> [Elem] -> [Elem]),
--- con "reverse" (reverse :: [Elem] -> [Elem]),
- con "head" (head :: [Elem] -> Elem),
- con "tail" (tail :: [Elem] -> [Elem]),
- con ":" ((:) :: Elem -> [Elem] -> [Elem]),
- con "[]" ([] :: [Elem]),
- con "sort" (Data.List.sort :: [Elem] -> [Elem]),
+ con "reverse" (reverse :: [Elem] -> [Elem]),
+ con "length" (length :: [Elem] -> Int),
+ con "foldl" (foldl :: (Elem -> Elem -> Elem) -> Elem -> [Elem] -> Elem),
+ con "foldl" (foldr :: (Elem -> Elem -> Elem) -> Elem -> [Elem] -> Elem),
+ con "map" (map :: (Elem -> Elem) -> [Elem] -> [Elem]),
+ var "f" (undefined :: Elem -> Elem),
+ var "g" (undefined :: Elem -> Elem),
+ var "f" (undefined :: Elem -> Elem -> Elem),
+ var "g" (undefined :: Elem -> Elem -> Elem),
+-- con "head" (head :: [Elem] -> Elem),
+-- con "tail" (tail :: [Elem] -> [Elem]),
+ -- con ":" ((:) :: Elem -> [Elem] -> [Elem]),
+ con "[]" ([] :: [Elem])]
+-- con "sort" (Data.List.sort :: [Elem] -> [Elem]),
 -- con "mergeL" mergeL,
- con "unit" (\x -> [x] :: [Elem]),
+-- con "unit" (\x -> [x] :: [Elem]),
 -- con "insertL" (Data.List.insert :: Int -> [Int] -> [Int]),
- con "null" (null :: [Elem] -> Bool)]
+-- con "null" (null :: [Elem] -> Bool)]
   where list :: [Elem]
         list = undefined
 
@@ -169,10 +177,10 @@ heaps = describe "heaps" [
 nats = describe "nats" [
  con "+" ((+) :: Int -> Int -> Int),
 -- con "-" ((-) :: Int -> Int -> Int),
- con "*" ((*) :: Int -> Int -> Int),
- con "neg" (negate :: Int -> Int),
- con "0" (0 :: Int),
- con "1" (1 :: Int) ]
+-- con "*" ((*) :: Int -> Int -> Int),
+-- con "neg" (negate :: Int -> Int),
+ con "0" (0 :: Int) ]
+-- con "1" (1 :: Int) ]
 
 type StackSet = T.StackSet Elem
 
@@ -209,13 +217,13 @@ tinywm = describe "tinywm" [
 examples = [
  ("nats", (base ++ nats, True, const True, allOfThem)),
  ("bools", (base ++ bools, True, const True, allOfThem)),
- ("lists", (base ++ bools ++ lists, True, const True, about ["lists"])),
+ ("lists", (base ++ lists, True, const True, about ["lists"])),
  ("heaps", (base ++ bools ++ lists ++ heaps, False, const True, about ["heaps"])),
  ("arrays", (base ++ arrays, True, const True, allOfThem)),
  ("comp", (base ++ comp, False, const True, allOfThem)),
  ("queues", (base ++ bools ++ queues, True, const True, about ["queues"])),
  ("queuesM", (queuesM, False, noRebinding, about ["queuesM"])),
--- ("arraysM", (arraysM, False, noRebinding, about ["arraysM"])),
+ ("arraysM", (arraysM, False, noRebinding, about ["arraysM"])),
  ("pretty", (base ++ nats ++ pretty, False, const True, about ["pretty"])),
  ("regex", (regex, False, const True, allOfThem)),
  ("tinywm", (base ++ lists ++ tinywm, True, const True, about ["tinywm"]))
@@ -297,25 +305,25 @@ arrays = [
  con "0" (Elem 0)
  ]
 
--- arraysM = describe "arraysM" [
---  (con "X" X) { typ = TVar },
---  (con "Y" Y) { typ = TVar },
---  (con "Z" Z) { typ = TVar },
---  var "x" (undefined :: Symbolic Elem),
---  var "y" (undefined :: Symbolic Elem),
---  var "z" (undefined :: Symbolic Elem),
--- -- var "i" (undefined :: Symbolic Index),
--- -- var "j" (undefined :: Symbolic Index),
--- -- var "k" (undefined :: Symbolic Index),
---  con "0" (Symbolic (const (Index 0)) :: Symbolic Index),
---  con "read" (read :: Var -> Symbolic Elem),
--- -- con "read" (read :: Var -> Symbolic Index),
---  con "return" (\x v -> symbolic (x :: Symbolic Elem) >>= write v :: Prog ArrayM ()),
---  con "return" (\x v -> symbolic (x :: Symbolic Index) >>= write v :: Prog ArrayM ()),
---  var "k" (undefined :: Prog ArrayM ()),
--- -- con "new" ((cps $ run newA)),
---  con "get" (\ix v -> cps $ symbolic ix >>= run . getA >>= write v),
---  con "set" (\ix x -> cps $ symbolic ix >>= \ix' -> symbolic x >>= run . setA ix')]
+arraysM = describe "arraysM" [
+ (con "X" X) { typ = TVar },
+ (con "Y" Y) { typ = TVar },
+ (con "Z" Z) { typ = TVar },
+ var "x" (undefined :: Symbolic Elem),
+ var "y" (undefined :: Symbolic Elem),
+ var "z" (undefined :: Symbolic Elem),
+-- var "i" (undefined :: Symbolic Index),
+-- var "j" (undefined :: Symbolic Index),
+-- var "k" (undefined :: Symbolic Index),
+ con "0" (Symbolic (const (Arrays.Index 0)) :: Symbolic Arrays.Index),
+ con "read" (read :: Var -> Symbolic Elem),
+-- con "read" (read :: Var -> Symbolic Index),
+ con "return" (\x v -> symbolic (x :: Symbolic Elem) >>= write v :: Prog ArrayM ()),
+ con "return" (\x v -> symbolic (x :: Symbolic Arrays.Index) >>= write v :: Prog ArrayM ()),
+ var "k" (undefined :: Prog ArrayM ()),
+-- con "new" ((cps $ run newA)),
+ con "get" (\ix v -> cps $ symbolic ix >>= run . getA >>= write v),
+ con "set" (\ix x -> cps $ symbolic ix >>= \ix' -> symbolic x >>= run . setA ix')]
 
 comp = [
  var "f" (undefined :: (Int -> Int)),

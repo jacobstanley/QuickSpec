@@ -54,6 +54,8 @@ terms (n+1) = base0 `union` base1 <*> terms n `union` base2 <*> terms n <*> term
 -- Our term-generation data structure will be a map family -> TestTree blahblah.
 -- So then we aggressively split up our termsets by family?
 -- We also need some stuff so that a family can include smaller families---implementation: memoise a function [Family]->TestTree. Alternatively---when we see a variable in a term, we remember which other terms we could have generated there. What we're proposing now is to reconstruct the variable's family later instead, which is maybe not as nice... because, what we have is the depth of the term as a whole and not the depth of the "hole" that the variable fills.
+--
+-- This means that terms of different families can be equal. That we model by using union somewhere late on.
 
 instance Eval IntTerm where
   type TestCase IntTerm = Val

@@ -69,7 +69,7 @@ filter p (NonNil t) = NonNil (filter' p t)
 
 filter' :: (Ord a, Eval a) => (TestCase a -> Bool) -> InnerTestTree a -> InnerTestTree a
 filter' p t | p (testCase t) = t { branches = bs }
-           | otherwise = foldr1 union' bs
+            | otherwise = foldr1 union' bs
   where bs = map (filter' p) (branches t)
 
 -- A TestTree with finite depth, represented as a TestTree where some

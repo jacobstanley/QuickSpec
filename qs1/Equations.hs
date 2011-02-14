@@ -296,8 +296,7 @@ test p depth ctx seeds base = do
   let cs0 = filter (not . null) [ filter p (terms ctx base ty) | ty <- allTypes ctx ]
   printf "%d terms, " (length (concat cs0))
   let evals = [ toValue . eval (memoSym ctx ctxFun) | (ctxFun, toValue) <- map useSeed seeds ]
-      conds = map (\f -> satisfied (f . Const)) evals
-      cs1 = evaluate (take 500 (zip evals conds)) (pack cs0)
+      cs1 = evaluate (\() -> take 200 evals) (pack cs0)
   printf "%d classes, %d raw equations.\n"
          (length (unpack cs1))
          (sum (map (subtract 1 . length) (unpack cs1)))
