@@ -81,7 +81,7 @@ evaluate ss (Classes cs rss) = Classes (cs ++ map snd ss)
                                        [ TestResults xs (vss ++ map (evaluate1 xs) ss)
                                        | TestResults xs vss <- rss ]
   where evaluate1 xs (eval, _) = collate (map eval xs)
-        collate vs = [ Map.findWithDefault undefined v m | v <- vs ] `using` seqList rwhnf
+        collate vs = [ Map.findWithDefault undefined v m | v <- vs ] `using` evalList rseq
           where m = Map.fromList (zip (nubSort vs) [0..])
 
 restrict :: Condition -> Classes a -> Classes a

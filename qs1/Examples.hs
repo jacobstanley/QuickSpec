@@ -11,7 +11,7 @@ import Data.Maybe
 import Data.Ord
 import Data.Typeable
 import Test.QuickCheck
-import System hiding (getEnv)
+import System.Environment hiding (getEnv)
 import System.Random
 import Control.Arrow
 import Control.Monad
@@ -530,12 +530,12 @@ noRebinding t = evalStateT (check t) [] /= Nothing
 
 allTerms reps n _ _ | n < 0 = error "oops"
 allTerms reps 0 ctx _ = []
-allTerms reps (n+1) ctx ty = syms ctx ty ++
+allTerms reps n ctx ty = syms ctx ty ++
                          [ App f x
                          | ty' <- argTypes ctx ty
-                         , x  <- allTerms reps n ctx ty'
+                         , x  <- allTerms reps (n-1) ctx ty'
                          , not (termIsUndefined x)
-                         , f  <- allTerms reps (n+1) ctx (mkFunTy ty' ty)
+                         , f  <- allTerms reps n ctx (mkFunTy ty' ty)
                          , f `elem` reps
                          , x `elem` reps
                          , not (termIsUndefined f)
@@ -543,12 +543,12 @@ allTerms reps (n+1) ctx ty = syms ctx ty ++
 
 allTerms' reps n _ _ | n < 0 = error "oops"
 allTerms' reps 0 ctx _ = []
-allTerms' reps (n+1) ctx ty = syms ctx ty ++
+allTerms' reps n ctx ty = syms ctx ty ++
                           [ App f x
                           | ty' <- argTypes ctx ty
-                          , x <- allTerms' reps n ctx ty'
+                          , x <- allTerms' reps (n-1) ctx ty'
                           , not (termIsUndefined x)
-                          , f  <- allTerms' reps (n+1-size x) ctx (mkFunTy ty' ty)
+                          , f  <- allTerms' reps (n-size x) ctx (mkFunTy ty' ty)
                           , not (termIsUndefined f)
                           , f `elem` reps
                           , x `elem` reps
