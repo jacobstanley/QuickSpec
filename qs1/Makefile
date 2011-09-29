@@ -10,9 +10,9 @@ specimen-results: results
 
 results: Examples
 	rm -f $@
-	@($(foreach test, nats bools lists heaps,\
+	@($(foreach test, hamt,\
 		echo $(test): &&\
-		(./Examples $(test) | grep "== equations ==" -B 0 -A 9999 | sed 's/^/  /') && echo && ) true) | tee $@
+		(time -f "real %es / user %Us / sys %Ss" ./Examples $(test) ) && echo && ) true) | tee $@
 
 bools nats lists heaps arrays comp queues pretty regex queuesM arraysM tinywm: Examples
 	zsh -i -c "bench ./Examples $@"

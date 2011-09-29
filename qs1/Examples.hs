@@ -10,6 +10,7 @@ import qualified Data.List
 import Data.Maybe
 import Data.Ord
 import Data.Typeable
+import Data.Hashable
 import Test.QuickCheck
 import System.Environment hiding (getEnv)
 import System.Random
@@ -21,6 +22,7 @@ import Regex hiding (State, run)
 import qualified TinyWM as T
 import qualified TinyWMProperties as TP
 import qualified Data.Map as M
+import qualified Data.HashMap.Lazy as HM
 import qualified Regex
 import qualified Arrays
 
@@ -167,6 +169,74 @@ heaps = describe "heaps" [
 -- con "rightBranch" (rightBranch :: Heap Elem -> Heap Elem)
  ]
 
+------------------------------------------------------------------------
+-- HAMT
+
+-- Key type that generates more hash collisions.
+newtype Key = K { unK :: Int }
+            deriving (Arbitrary, CoArbitrary, Eq, Ord, Typeable, Show)
+
+instance Classify Key where
+  type Value Key = Key
+  evaluate = return
+
+instance Hashable Key where
+    hash k = hash (unK k) `mod` 20
+
+type HashMap = HM.HashMap Key Elem
+
+instance (Classify k, Hashable k, Eq k, Classify v) => Classify (HM.HashMap k v) where
+  type Value (HM.HashMap k v) = [(Value k, Value v)]
+  evaluate = evaluate . HM.toList
+
+instance (Arbitrary k, Hashable k, Eq k, Arbitrary v) => Arbitrary (HM.HashMap k v) where
+  arbitrary = HM.fromList `fmap` arbitrary
+
+maybes = describe "maybes"
+ [ con "Nothing" (Nothing :: Maybe Elem)
+ , con "Just"    (Just    :: Elem -> Maybe Elem)
+ ]
+
+functions = describe "functions"
+ [ var "f" (undefined :: Elem -> Elem)
+ , var "p" (undefined :: Elem -> Bool)
+ , con "id"        (id        :: Elem -> Elem)
+ , con "undefined" (undefined :: Elem)
+ --, con "max"       (max       :: Elem -> Elem -> Elem)
+ --, con "maximum"   (maximum   :: [Elem] -> Elem)
+ --, con "min"       (min   :: Elem -> Elem -> Elem)
+ --, con "const" (const :: Elem -> Elem -> Elem)
+ ]
+
+hamtParts = base ++ bools ++ nats ++ maybes ++ functions ++ lists ++ hamt
+
+hamt = describe "hamt"
+ [ var "h"  (HM.empty :: HashMap)
+ , var "h1" (HM.empty :: HashMap)
+ , var "k"  (K 0 :: Key)
+ , var "k1" (K 0 :: Key)
+
+ , con "empty"        (HM.empty        :: HashMap)
+ , con "singleton"    (HM.singleton    :: Key -> Elem -> HashMap)
+ , con "toList"       (HM.toList       :: HashMap -> [(Key, Elem)])
+ , con "fromList"     (HM.fromList     :: [(Key, Elem)] -> HashMap)
+ , con "null"         (HM.null         :: HashMap -> Bool)
+ , con "size"         (HM.size         :: HashMap -> Int)
+ , con "lookup"       (HM.lookup       :: Key -> HashMap -> Maybe Elem)
+ , con "insert"       (HM.insert       :: Key -> Elem -> HashMap -> HashMap)
+ , con "delete"       (HM.delete       :: Key -> HashMap -> HashMap)
+ , con "adjust"       (HM.adjust       :: (Elem -> Elem) -> Key -> HashMap -> HashMap)
+ , con "map"          (HM.map          :: (Elem -> Elem) -> HashMap -> HashMap)
+ , con "filter"       (HM.filter       :: (Elem -> Bool) -> HashMap -> HashMap)
+ , con "elems"        (HM.elems        :: HashMap -> [Elem])
+
+ , con "union"        (HM.union        :: HashMap -> HashMap -> HashMap)
+ , con "difference"   (HM.difference   :: HashMap -> HashMap -> HashMap)
+ , con "intersection" (HM.intersection :: HashMap -> HashMap -> HashMap)
+ -- , con "foldl"        (HM.foldl'       :: (Elem -> Elem -> Elem) -> Elem -> HashMap -> Elem)
+ ]
+
+------------------------------------------------------------------------
 
 nats = describe "nats" [
  con " + " ((+) :: Int -> Int -> Int),
@@ -220,7 +290,8 @@ examples = [
 -- ("arraysM", (arraysM,                         False, noRebinding, about ["arraysM"])),
  ("pretty",    (base ++ nats ++ pretty,          False, const True,  about ["pretty"])),
  ("regex",     (regex,                           False, const True,  allOfThem)),
- ("tinywm",    (base ++ lists ++ tinywm,         True,  const True,  about ["tinywm"]))
+ ("tinywm",    (base ++ lists ++ tinywm,         True,  const True,  about ["tinywm"])),
+ ("hamt",      (hamtParts,                       False, const True,  about ["hamt"]))
  ]
 
 data Sym = A | B deriving (Eq, Ord, Typeable)
