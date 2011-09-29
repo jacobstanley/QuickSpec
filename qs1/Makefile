@@ -18,7 +18,13 @@ bools nats lists heaps arrays comp queues pretty regex queuesM arraysM tinywm: E
 	zsh -i -c "bench ./Examples $@"
 
 Examples: *.hs
-	ghc --make -O2 Examples.hs -ignore-package monads-fd
+	ghc --make -Odph -O2 Examples.hs \
+		-fllvm -optlo-O3 -optlc-O3 \
+		-funbox-strict-fields \
+		-ignore-package monads-fd \
+		-ignore-package monads-tf \
+		-package mtl-1.1.1.1 \
+		-package parallel
 
 clean:
 	rm -f Examples *.hi *.o

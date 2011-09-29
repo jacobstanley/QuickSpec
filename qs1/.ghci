@@ -1,0 +1,3 @@
+:set -hide-package monads-fd
+:set -hide-package monads-tf
+:set -package mtl-1.1.1.1
