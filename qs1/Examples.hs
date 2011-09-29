@@ -230,10 +230,10 @@ hamt = describe "hamt"
  , con "filter"       (HM.filter       :: (Elem -> Bool) -> HashMap -> HashMap)
  , con "elems"        (HM.elems        :: HashMap -> [Elem])
 
- , con "union"        (HM.union        :: HashMap -> HashMap -> HashMap)
- , con "difference"   (HM.difference   :: HashMap -> HashMap -> HashMap)
- , con "intersection" (HM.intersection :: HashMap -> HashMap -> HashMap)
- -- , con "foldl"        (HM.foldl'       :: (Elem -> Elem -> Elem) -> Elem -> HashMap -> Elem)
+ --, con "union"        (HM.union        :: HashMap -> HashMap -> HashMap)
+ --, con "difference"   (HM.difference   :: HashMap -> HashMap -> HashMap)
+ --, con "intersection" (HM.intersection :: HashMap -> HashMap -> HashMap)
+ --, con "foldl"        (HM.foldl'       :: (Elem -> Elem -> Elem) -> Elem -> HashMap -> Elem)
  ]
 
 ------------------------------------------------------------------------
