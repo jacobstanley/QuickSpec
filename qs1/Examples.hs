@@ -28,12 +28,12 @@ bools = describe "bools" [
  var "x" False,
  var "y" False,
  var "z" False,
- con "&&" (&&),
- con "||" (||),
+ con " && " (&&),
+ con " || " (||),
  con "not" not,
 -- con "=>" (\x y -> not x || y),
- con "true" True,
- con "false" False
+ con "True" True,
+ con "False" False
  ]
 
 base = [
@@ -42,7 +42,7 @@ base = [
  var "z" (undefined :: Elem),
  var "i" int,
  var "j" int,
- var "k" int ]
+ var "n" int ]
   where int :: Int
         int = undefined
 
@@ -50,15 +50,16 @@ lists = describe "lists" [
  var "xs" list,
  var "ys" list,
  var "zs" list,
- con "++" ((++) :: [Elem] -> [Elem] -> [Elem]),
+ con " ++ " ((++) :: [Elem] -> [Elem] -> [Elem]),
 -- con "reverse" (reverse :: [Elem] -> [Elem]),
  con "head" (head :: [Elem] -> Elem),
  con "tail" (tail :: [Elem] -> [Elem]),
- con ":" ((:) :: Elem -> [Elem] -> [Elem]),
+ con " : " ((:) :: Elem -> [Elem] -> [Elem]),
  con "[]" ([] :: [Elem]),
- con "sort" (Data.List.sort :: [Elem] -> [Elem]),
+ --con "sort" (Data.List.sort :: [Elem] -> [Elem]),
+ --con "nub" (Data.List.nub :: [Elem] -> [Elem]),
 -- con "mergeL" mergeL,
- con "unit" (\x -> [x] :: [Elem]),
+ --con "unit" (\x -> [x] :: [Elem]),
 -- con "insertL" (Data.List.insert :: Int -> [Int] -> [Int]),
  con "null" (null :: [Elem] -> Bool)]
   where list :: [Elem]
@@ -166,10 +167,11 @@ heaps = describe "heaps" [
 -- con "rightBranch" (rightBranch :: Heap Elem -> Heap Elem)
  ]
 
+
 nats = describe "nats" [
- con "+" ((+) :: Int -> Int -> Int),
--- con "-" ((-) :: Int -> Int -> Int),
- con "*" ((*) :: Int -> Int -> Int),
+ con " + " ((+) :: Int -> Int -> Int),
+-- con " - " ((-) :: Int -> Int -> Int),
+ con " * " ((*) :: Int -> Int -> Int),
  con "neg" (negate :: Int -> Int),
  con "0" (0 :: Int),
  con "1" (1 :: Int) ]
@@ -207,18 +209,18 @@ tinywm = describe "tinywm" [
  var "o'" (undefined :: Ordering)]
 
 examples = [
- ("nats", (base ++ nats, True, const True, allOfThem)),
- ("bools", (base ++ bools, True, const True, allOfThem)),
- ("lists", (base ++ bools ++ lists, True, const True, about ["lists"])),
- ("heaps", (base ++ bools ++ lists ++ heaps, False, const True, about ["heaps"])),
- ("arrays", (base ++ arrays, True, const True, allOfThem)),
- ("comp", (base ++ comp, False, const True, allOfThem)),
- ("queues", (base ++ bools ++ queues, True, const True, about ["queues"])),
- ("queuesM", (queuesM, False, noRebinding, about ["queuesM"])),
--- ("arraysM", (arraysM, False, noRebinding, about ["arraysM"])),
- ("pretty", (base ++ nats ++ pretty, False, const True, about ["pretty"])),
- ("regex", (regex, False, const True, allOfThem)),
- ("tinywm", (base ++ lists ++ tinywm, True, const True, about ["tinywm"]))
+ ("nats",      (base ++ nats,                    True,  const True,  allOfThem)),
+ ("bools",     (base ++ bools,                   True,  const True,  allOfThem)),
+ ("lists",     (base ++ bools ++ lists,          True,  const True,  about ["lists"])),
+ ("heaps",     (base ++ bools ++ lists ++ heaps, False, const True,  about ["heaps"])),
+ ("arrays",    (base ++ arrays,                  True,  const True,  allOfThem)),
+ ("comp",      (base ++ comp,                    False, const True,  allOfThem)),
+ ("queues",    (base ++ bools ++ queues,         True,  const True,  about ["queues"])),
+ ("queuesM",   (queuesM,                         False, noRebinding, about ["queuesM"])),
+-- ("arraysM", (arraysM,                         False, noRebinding, about ["arraysM"])),
+ ("pretty",    (base ++ nats ++ pretty,          False, const True,  about ["pretty"])),
+ ("regex",     (regex,                           False, const True,  allOfThem)),
+ ("tinywm",    (base ++ lists ++ tinywm,         True,  const True,  about ["tinywm"]))
  ]
 
 data Sym = A | B deriving (Eq, Ord, Typeable)
