@@ -43,7 +43,7 @@ rep t = do
     Nothing -> return t
     Just t' -> do
       r <- rep t'
-      when (t' /= r) $ putLinks (IntMap.insert t r m)
+      when (t' /= r) $ modifyLinks (IntMap.insert t r)
       return r
 
 isRep :: Int -> UF Bool

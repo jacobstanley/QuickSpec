@@ -3,7 +3,7 @@ module Regex where
 
 import Debug.Trace
 import qualified Control.Monad.State as S
-import Control.Monad.State hiding (State)
+import Control.Monad.State hiding (State, state)
 import qualified Data.Map as M
 import Data.List
 import Data.Map(Map)

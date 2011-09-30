@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-deprecated-flags #-}
-{-# LANGUAGE ScopedTypeVariables,DeriveDataTypeable,TypeFamilies,GeneralizedNewtypeDeriving,TypeSynonymInstances,StandaloneDeriving,FlexibleInstances,FlexibleContexts,UndecidableInstances,PatternSignatures #-}
+{-# LANGUAGE ScopedTypeVariables,DeriveDataTypeable,TypeFamilies,GeneralizedNewtypeDeriving,TypeSynonymInstances,StandaloneDeriving,FlexibleInstances,FlexibleContexts,UndecidableInstances,PatternSignatures,NPlusKPatterns #-}
 
 module Main where
 
@@ -23,6 +23,7 @@ import qualified TinyWMProperties as TP
 import qualified Data.Map as M
 import qualified Regex
 import qualified Arrays
+import Control.Monad.Identity
 
 bools = describe "bools" [
  var "x" False,
@@ -347,7 +348,8 @@ instance Classify Queue where
   type Value Queue = [Elem]
   evaluate = return . listQ
 
-deriving instance Typeable2 State
+-- deriving instance Typeable2 State
+deriving instance Typeable1 Identity
 
 instance (Typeable s, Typeable1 m) => Typeable1 (StateT s m) where
   typeOf1 (_ :: StateT s m a) = mkTyConApp (mkTyCon "Control.Monad.State.StateT")
