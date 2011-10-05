@@ -10,8 +10,9 @@ import qualified Data.List
 import Data.Maybe
 import Data.Ord
 import Data.Typeable
+import Data.Hashable
 import Test.QuickCheck
-import System hiding (getEnv)
+import System.Environment hiding (getEnv)
 import System.Random
 import Control.Arrow
 import Control.Monad
@@ -21,6 +22,7 @@ import Regex hiding (State, run)
 import qualified TinyWM as T
 import qualified TinyWMProperties as TP
 import qualified Data.Map as M
+import qualified Data.HashMap.Lazy as HM
 import qualified Regex
 import qualified Arrays
 import Control.Monad.Identity
@@ -29,12 +31,12 @@ bools = describe "bools" [
  var "x" False,
  var "y" False,
  var "z" False,
- con "&&" (&&),
- con "||" (||),
+ con " && " (&&),
+ con " || " (||),
  con "not" not,
 -- con "=>" (\x y -> not x || y),
- con "true" True,
- con "false" False
+ con "True" True,
+ con "False" False
  ]
 
 base = [
@@ -43,7 +45,7 @@ base = [
  var "z" (undefined :: Elem),
  var "i" int,
  var "j" int,
- var "k" int ]
+ var "n" int ]
   where int :: Int
         int = undefined
 
@@ -51,7 +53,7 @@ lists = describe "lists" [
  var "xs" list,
  var "ys" list,
  var "zs" list,
- con "++" ((++) :: [Elem] -> [Elem] -> [Elem]),
+ con " ++ " ((++) :: [Elem] -> [Elem] -> [Elem]),
  con "reverse" (reverse :: [Elem] -> [Elem]),
  con "length" (length :: [Elem] -> Int),
  con "foldl" (foldl :: (Elem -> Elem -> Elem) -> Elem -> [Elem] -> Elem),
@@ -61,9 +63,9 @@ lists = describe "lists" [
  var "g" (undefined :: Elem -> Elem),
  var "f" (undefined :: Elem -> Elem -> Elem),
  var "g" (undefined :: Elem -> Elem -> Elem),
--- con "head" (head :: [Elem] -> Elem),
--- con "tail" (tail :: [Elem] -> [Elem]),
- -- con ":" ((:) :: Elem -> [Elem] -> [Elem]),
+ con "head" (head :: [Elem] -> Elem),
+ con "tail" (tail :: [Elem] -> [Elem]),
+ con " : " ((:) :: Elem -> [Elem] -> [Elem]),
  con "[]" ([] :: [Elem])]
 -- con "sort" (Data.List.sort :: [Elem] -> [Elem]),
 -- con "mergeL" mergeL,
@@ -175,13 +177,82 @@ heaps = describe "heaps" [
 -- con "rightBranch" (rightBranch :: Heap Elem -> Heap Elem)
  ]
 
+------------------------------------------------------------------------
+-- HAMT
+
+-- Key type that generates more hash collisions.
+newtype Key = K { unK :: Int }
+            deriving (Arbitrary, CoArbitrary, Eq, Ord, Typeable, Show)
+
+instance Classify Key where
+  type Value Key = Key
+  evaluate = return
+
+instance Hashable Key where
+    hash k = hash (unK k) `mod` 20
+
+type HashMap = HM.HashMap Key Elem
+
+instance (Classify k, Hashable k, Eq k, Classify v) => Classify (HM.HashMap k v) where
+  type Value (HM.HashMap k v) = [(Value k, Value v)]
+  evaluate = evaluate . HM.toList
+
+instance (Arbitrary k, Hashable k, Eq k, Arbitrary v) => Arbitrary (HM.HashMap k v) where
+  arbitrary = HM.fromList `fmap` arbitrary
+
+maybes = describe "maybes"
+ [ con "Nothing" (Nothing :: Maybe Elem)
+ , con "Just"    (Just    :: Elem -> Maybe Elem)
+ ]
+
+functions = describe "functions"
+ [ var "f" (undefined :: Elem -> Elem)
+ , var "p" (undefined :: Elem -> Bool)
+ , con "id"        (id        :: Elem -> Elem)
+ , con "undefined" (undefined :: Elem)
+ --, con "max"       (max       :: Elem -> Elem -> Elem)
+ --, con "maximum"   (maximum   :: [Elem] -> Elem)
+ --, con "min"       (min   :: Elem -> Elem -> Elem)
+ --, con "const" (const :: Elem -> Elem -> Elem)
+ ]
+
+hamtParts = base ++ bools ++ nats ++ maybes ++ functions ++ lists ++ hamt
+
+hamt = describe "hamt"
+ [ var "h"  (HM.empty :: HashMap)
+ , var "h1" (HM.empty :: HashMap)
+ , var "k"  (K 0 :: Key)
+ , var "k1" (K 0 :: Key)
+
+ , con "empty"        (HM.empty        :: HashMap)
+ , con "singleton"    (HM.singleton    :: Key -> Elem -> HashMap)
+ , con "toList"       (HM.toList       :: HashMap -> [(Key, Elem)])
+ , con "fromList"     (HM.fromList     :: [(Key, Elem)] -> HashMap)
+ , con "null"         (HM.null         :: HashMap -> Bool)
+ , con "size"         (HM.size         :: HashMap -> Int)
+ , con "lookup"       (HM.lookup       :: Key -> HashMap -> Maybe Elem)
+ , con "insert"       (HM.insert       :: Key -> Elem -> HashMap -> HashMap)
+ , con "delete"       (HM.delete       :: Key -> HashMap -> HashMap)
+ , con "adjust"       (HM.adjust       :: (Elem -> Elem) -> Key -> HashMap -> HashMap)
+ , con "map"          (HM.map          :: (Elem -> Elem) -> HashMap -> HashMap)
+ , con "filter"       (HM.filter       :: (Elem -> Bool) -> HashMap -> HashMap)
+ , con "elems"        (HM.elems        :: HashMap -> [Elem])
+
+ --, con "union"        (HM.union        :: HashMap -> HashMap -> HashMap)
+ --, con "difference"   (HM.difference   :: HashMap -> HashMap -> HashMap)
+ --, con "intersection" (HM.intersection :: HashMap -> HashMap -> HashMap)
+ --, con "foldl"        (HM.foldl'       :: (Elem -> Elem -> Elem) -> Elem -> HashMap -> Elem)
+ ]
+
+------------------------------------------------------------------------
+
 nats = describe "nats" [
- con "+" ((+) :: Int -> Int -> Int),
--- con "-" ((-) :: Int -> Int -> Int),
--- con "*" ((*) :: Int -> Int -> Int),
--- con "neg" (negate :: Int -> Int),
- con "0" (0 :: Int) ]
--- con "1" (1 :: Int) ]
+ con " + " ((+) :: Int -> Int -> Int),
+-- con " - " ((-) :: Int -> Int -> Int),
+ con " * " ((*) :: Int -> Int -> Int),
+ con "neg" (negate :: Int -> Int),
+ con "0" (0 :: Int),
+ con "1" (1 :: Int) ]
 
 type StackSet = T.StackSet Elem
 
@@ -216,18 +287,19 @@ tinywm = describe "tinywm" [
  var "o'" (undefined :: Ordering)]
 
 examples = [
- ("nats", (base ++ nats, True, const True, allOfThem)),
- ("bools", (base ++ bools, True, const True, allOfThem)),
- ("lists", (base ++ lists, True, const True, about ["lists"])),
- ("heaps", (base ++ bools ++ lists ++ heaps, False, const True, about ["heaps"])),
- ("arrays", (base ++ arrays, True, const True, allOfThem)),
- ("comp", (base ++ comp, False, const True, allOfThem)),
- ("queues", (base ++ bools ++ queues, True, const True, about ["queues"])),
- ("queuesM", (queuesM, False, noRebinding, about ["queuesM"])),
- ("arraysM", (arraysM, False, noRebinding, about ["arraysM"])),
- ("pretty", (base ++ nats ++ pretty, False, const True, about ["pretty"])),
- ("regex", (regex, False, const True, allOfThem)),
- ("tinywm", (base ++ lists ++ tinywm, True, const True, about ["tinywm"]))
+ ("nats",      (base ++ nats,                    True,  const True,  allOfThem)),
+ ("bools",     (base ++ bools,                   True,  const True,  allOfThem)),
+ ("lists",     (base ++ bools ++ lists,          True,  const True,  about ["lists"])),
+ ("heaps",     (base ++ bools ++ lists ++ heaps, False, const True,  about ["heaps"])),
+ ("arrays",    (base ++ arrays,                  True,  const True,  allOfThem)),
+ ("comp",      (base ++ comp,                    False, const True,  allOfThem)),
+ ("queues",    (base ++ bools ++ queues,         True,  const True,  about ["queues"])),
+ ("queuesM",   (queuesM,                         False, noRebinding, about ["queuesM"])),
+-- ("arraysM", (arraysM,                         False, noRebinding, about ["arraysM"])),
+ ("pretty",    (base ++ nats ++ pretty,          False, const True,  about ["pretty"])),
+ ("regex",     (regex,                           False, const True,  allOfThem)),
+ ("tinywm",    (base ++ lists ++ tinywm,         True,  const True,  about ["tinywm"])),
+ ("hamt",      (hamtParts,                       False, const True,  about ["hamt"]))
  ]
 
 data Sym = A | B deriving (Eq, Ord, Typeable)
@@ -540,12 +612,12 @@ noRebinding t = evalStateT (check t) [] /= Nothing
 
 allTerms reps n _ _ | n < 0 = error "oops"
 allTerms reps 0 ctx _ = []
-allTerms reps (n+1) ctx ty = syms ctx ty ++
+allTerms reps n ctx ty = syms ctx ty ++
                          [ App f x
                          | ty' <- argTypes ctx ty
-                         , x  <- allTerms reps n ctx ty'
+                         , x  <- allTerms reps (n-1) ctx ty'
                          , not (termIsUndefined x)
-                         , f  <- allTerms reps (n+1) ctx (mkFunTy ty' ty)
+                         , f  <- allTerms reps n ctx (mkFunTy ty' ty)
                          , f `elem` reps
                          , x `elem` reps
                          , not (termIsUndefined f)
@@ -553,12 +625,12 @@ allTerms reps (n+1) ctx ty = syms ctx ty ++
 
 allTerms' reps n _ _ | n < 0 = error "oops"
 allTerms' reps 0 ctx _ = []
-allTerms' reps (n+1) ctx ty = syms ctx ty ++
+allTerms' reps n ctx ty = syms ctx ty ++
                           [ App f x
                           | ty' <- argTypes ctx ty
-                          , x <- allTerms' reps n ctx ty'
+                          , x <- allTerms' reps (n-1) ctx ty'
                           , not (termIsUndefined x)
-                          , f  <- allTerms' reps (n+1-size x) ctx (mkFunTy ty' ty)
+                          , f  <- allTerms' reps (n-size x) ctx (mkFunTy ty' ty)
                           , not (termIsUndefined f)
                           , f `elem` reps
                           , x `elem` reps

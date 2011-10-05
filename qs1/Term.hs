@@ -90,7 +90,7 @@ mapVars f (Var v)   = Var (f v)
 mapVars f (App t u) = App (mapVars f t) (mapVars f u)
 
 skeleton :: Term c -> Term c
-skeleton (Var _) = Var (Symbol { label = 0, name = "*", typ = TVar })
+skeleton (Var _) = Var (Symbol { label = 0, name = "*", typ = TVar, description = undefined, isUndefined = undefined, range = undefined })
 skeleton (Const c) = Const c
 skeleton (App t u) = App (skeleton t) (skeleton u)
 
@@ -103,13 +103,13 @@ instance Ord s => Ord (Term s) where
   s `compare` t = stamp s `compare` stamp t
    where
     stamp t = (depth t, size t, -occur t, top t, args t)
-    
+
     occur t = length (vars t)
-    
+
     top (Var s)   = Just (Left s)
     top (Const s) = Just (Right s)
     top _         = Nothing
-    
+
     args (App s t) = [s, t]
     args _         = []
 

@@ -1,8 +1,8 @@
-{-# OPTIONS -fglasgow-exts #-}
+{-# LANGUAGE ScopedTypeVariables,DeriveDataTypeable,TypeFamilies,GeneralizedNewtypeDeriving,TypeSynonymInstances,StandaloneDeriving,FlexibleInstances,FlexibleContexts,UndecidableInstances #-}
 
 module TinyWM where
 
-import Data.Maybe   
+import Data.Maybe
 import Data.Map (Map)
 import Data.Typeable
 import qualified Data.Map as M
